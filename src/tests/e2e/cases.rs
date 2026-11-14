@@ -278,6 +278,12 @@ fn account_for_races_in_snapshot(snapshot: String) -> String {
     // its output. Keep the status line while ignoring whether the input echo
     // survived that repaint.
     let echo_status_command_replace = Regex::new(r"(?m)^(│\$) echo \$\?(\s+│)$").unwrap();
+    // The status bar prints the running generation as `<semver>+g<sha8>[.dirty]`.
+    // The sha is this build's commit, so a committed snapshot cannot pin it.
+    let generation_replace = Regex::new(r"(\d+\.\d+\.\d+)\+g[0-9a-f]{8}(?:\.dirty)?").unwrap();
+    // A missing product launcher falls through to a login shell whose prompt
+    // includes the machine hostname. CI containers get a fresh id each run.
+    let shell_prompt_replace = Regex::new(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}:~\$").unwrap();
     let snapshot = base_replace.replace_all(&snapshot, "\n").to_string();
     let snapshot = base_replace_tmux_mode_1
         .replace_all(&snapshot, "\n")
@@ -304,8 +310,45 @@ fn account_for_races_in_snapshot(snapshot: String) -> String {
         // Preserve the terminal-grid width while erasing the optional echo.
         .replace_all(&snapshot, "$1        $2")
         .to_string();
+    let snapshot = generation_replace
+        .replace_all(&snapshot, "$1+gSHA")
+        .to_string();
+    let snapshot = shell_prompt_replace
+        .replace_all(&snapshot, "host:~$")
+        .to_string();
 
-    eol_arrow_replace.replace_all(&snapshot, "\n").to_string()
+    let snapshot = eol_arrow_replace.replace_all(&snapshot, "\n").to_string();
+    // The status row races through three paints: chip only, chip plus the
+    // long shortcut labels, then the same row with the wider published
+    // generation (which compresses those labels). The pane contents are the
+    // assertion; the row itself is not stable across runners.
+    let ends_with_newline = snapshot.ends_with('\n');
+    let mut snapshot = snapshot
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim();
+            let chip =
+                trimmed.contains("GEN ?") || trimmed.contains("GEN !") || trimmed.contains("+gSHA");
+            let mode_row = (line.contains("LOCK") || line.contains("PANE") || line.contains("TAB"))
+                && line.contains(" !");
+            // Locked mode sometimes paints only the session identity, with
+            // no shortcut row and no generation chip yet.
+            let bare_identity = trimmed.ends_with(" !")
+                && !trimmed.contains('│')
+                && !trimmed.contains('┌')
+                && !trimmed.contains('└');
+            if chip || mode_row || bare_identity {
+                "STATUS"
+            } else {
+                line
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    if ends_with_newline {
+        snapshot.push('\n');
+    }
+    snapshot
 }
 
 fn normalize_mirrored_guide_content(snapshot: String) -> String {
@@ -354,6 +397,28 @@ fn snapshot_normalization_ignores_dynamic_server_live_counts() {
         let snapshot = format!("status ... LIVE {count:>3}↗\n");
         assert_eq!(account_for_races_in_snapshot(snapshot), "status ... \n");
     }
+}
+
+#[test]
+fn snapshot_normalization_keeps_generation_semver_and_drops_build_sha() {
+    let snapshot = "footer watcher_client_functionality !  4.5.1+ga60d44e6 ?\n";
+    assert_eq!(
+        account_for_races_in_snapshot(snapshot.to_owned()),
+        "STATUS\n"
+    );
+    let dirty = "4.5.1+ga60d44e6.dirty";
+    assert_eq!(account_for_races_in_snapshot(dirty.to_owned()), "STATUS");
+    assert_eq!(
+        account_for_races_in_snapshot("4aa0dee50d3b:~$ █".to_owned()),
+        "host:~$ █"
+    );
+    assert_eq!(
+        account_for_races_in_snapshot(
+            "                                                                       e2e-test !\n"
+                .to_owned()
+        ),
+        "STATUS\n"
+    );
 }
 
 #[test]
