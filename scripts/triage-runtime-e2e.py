@@ -1341,7 +1341,10 @@ def runtime_state_snapshot(
 ) -> dict[str, object]:
     session_state: dict[str, object] = {}
     for session in sorted(sessions):
-        query = query_session(binary, env, session)
+        # list-tabs and list-sessions can disagree for a moment while a
+        # session is registering. One mismatched read is not runtime truth;
+        # the stable query retries that window, then still fails closed.
+        query = query_session_until_stable(binary, env, session)
         if query.state == "absent":
             session_state[session] = {
                 "state": "absent",
