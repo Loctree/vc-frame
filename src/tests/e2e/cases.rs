@@ -282,7 +282,9 @@ fn account_for_races_in_snapshot(snapshot: String) -> String {
     // The sha is this build's commit, so a committed snapshot cannot pin it.
     let generation_replace = Regex::new(r"(\d+\.\d+\.\d+)\+g[0-9a-f]{8}(?:\.dirty)?").unwrap();
     // A missing product launcher falls through to a login shell whose prompt
-    // includes the machine hostname. CI containers get a fresh id each run.
+    // includes the machine hostname. CI containers get a fresh id each run,
+    // and that id is not a fixed width. Pad the replacement back to the
+    // matched prompt so a longer hostname cannot shift the pane border.
     let shell_prompt_replace = Regex::new(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}:~\$").unwrap();
     let snapshot = base_replace.replace_all(&snapshot, "\n").to_string();
     let snapshot = base_replace_tmux_mode_1
@@ -314,7 +316,18 @@ fn account_for_races_in_snapshot(snapshot: String) -> String {
         .replace_all(&snapshot, "$1+gSHA")
         .to_string();
     let snapshot = shell_prompt_replace
-        .replace_all(&snapshot, "host:~$")
+        .replace_all(&snapshot, |captures: &regex::Captures| {
+            let matched = captures
+                .get(0)
+                .map(|capture| capture.as_str())
+                .unwrap_or("");
+            let label = "host:~$";
+            if matched.len() > label.len() {
+                format!("{label}{}", " ".repeat(matched.len() - label.len()))
+            } else {
+                label.to_owned()
+            }
+        })
         .to_string();
 
     let snapshot = eol_arrow_replace.replace_all(&snapshot, "\n").to_string();
@@ -408,8 +421,13 @@ fn snapshot_normalization_keeps_generation_semver_and_drops_build_sha() {
     );
     let dirty = "4.5.1+ga60d44e6.dirty";
     assert_eq!(account_for_races_in_snapshot(dirty.to_owned()), "STATUS");
+    let prompt = "4aa0dee50d3b:~$ █";
+    let normalized_prompt = account_for_races_in_snapshot(prompt.to_owned());
+    assert_eq!(normalized_prompt.chars().count(), prompt.chars().count());
+    assert!(normalized_prompt.starts_with("host:~$"));
+    assert!(normalized_prompt.ends_with('█'));
     assert_eq!(
-        account_for_races_in_snapshot("4aa0dee50d3b:~$ █".to_owned()),
+        account_for_races_in_snapshot("ab:~$ █".to_owned()),
         "host:~$ █"
     );
     assert_eq!(

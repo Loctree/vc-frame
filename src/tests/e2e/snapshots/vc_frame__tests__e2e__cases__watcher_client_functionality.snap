@@ -10,7 +10,7 @@ SESSIONS 1 · Watcher Cli┌ Launchpad ─────────────�
    ○ ⚠ Shell            │  Launcher missing: /config/.config/vibecrafted/vc-frame/vc-start-here.py                     │
 + Open                  │  Repair: run make install from the Vibecrafted checkout with your verified Runtime Pack      │
                         │                                                                                              │
-                        │host:~$ █                                                                               │
+                        │host:~$       █                                                                               │
                         │                                                                                              │
                         │                                                                                              │
                         │                                                                                              │
