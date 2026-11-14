@@ -1232,7 +1232,80 @@ fn acquire_rail_order_lock(lock: &Path) -> Result<File, String> {
     Ok(file)
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn acquire_rail_order_lock(lock: &Path) -> Result<std::fs::File, String> {
+    use std::os::windows::fs::MetadataExt;
+    use std::os::windows::io::AsRawHandle;
+
+    if let Ok(metadata) = fs::symlink_metadata(lock)
+        && metadata.file_attributes() & 0x400 != 0
+    {
+        return Err(format!(
+            "rail allocator lock must not be a symlink: {}",
+            lock.display()
+        ));
+    }
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(lock)
+        .map_err(|error| {
+            format!(
+                "cannot open rail allocator lock {}: {error}",
+                lock.display()
+            )
+        })?;
+    if !file
+        .metadata()
+        .map_err(|error| {
+            format!(
+                "cannot inspect rail allocator lock {}: {error}",
+                lock.display()
+            )
+        })?
+        .is_file()
+    {
+        return Err(format!(
+            "rail allocator lock is not a regular file: {}",
+            lock.display()
+        ));
+    }
+    // The handle is opened without FILE_FLAG_OVERLAPPED, so a null OVERLAPPED
+    // makes LockFileEx a blocking exclusive lock. Closing the file releases it.
+    const LOCKFILE_EXCLUSIVE_LOCK: u32 = 0x0000_0002;
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn LockFileEx(
+            file: *mut core::ffi::c_void,
+            flags: u32,
+            reserved: u32,
+            bytes_low: u32,
+            bytes_high: u32,
+            overlapped: *mut core::ffi::c_void,
+        ) -> i32;
+    }
+    let locked = unsafe {
+        LockFileEx(
+            file.as_raw_handle() as *mut _,
+            LOCKFILE_EXCLUSIVE_LOCK,
+            0,
+            1,
+            0,
+            core::ptr::null_mut(),
+        )
+    };
+    if locked == 0 {
+        return Err(format!(
+            "cannot acquire rail allocator lock {}: {}",
+            lock.display(),
+            std::io::Error::last_os_error()
+        ));
+    }
+    Ok(file)
+}
+
+#[cfg(not(any(unix, windows)))]
 fn acquire_rail_order_lock(lock: &Path) -> Result<std::fs::File, String> {
     Err(format!(
         "rail allocator lock requires advisory file locks on this platform: {}",

@@ -5809,7 +5809,10 @@ mod vc_frame_command_path_tests {
         // The guest create / project handoff execs through this path; the
         // literal token must never reach tokio::process::Command.
         let resolved = resolve_run_command_executable(VC_FRAME_SELF_EXECUTABLE.to_owned());
-        assert!(resolved.starts_with('/'));
+        assert!(
+            std::path::Path::new(&resolved).is_absolute(),
+            "self token must resolve to an absolute executable, got {resolved}"
+        );
         assert_ne!(resolved, VC_FRAME_SELF_EXECUTABLE);
         let ordinary = "some-command".to_owned();
         assert_eq!(resolve_run_command_executable(ordinary.clone()), ordinary);

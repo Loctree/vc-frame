@@ -1033,10 +1033,9 @@ fn fast_exit_callback_waits_for_screen_commit_at_the_common_pty_fence() {
     resolution.expect("Screen commit must activate the process and release its callback fence");
     assert_eq!(ack, Ok(LayoutCommitAck::Resolved));
     callback_probe.fire_next_quit_callback(PaneId::Terminal(100), Some(0), command);
-    assert!(matches!(
-        screen_rx.try_recv(),
-        Ok((ScreenInstruction::ClosePane(PaneId::Terminal(100), ..), _))
-    ));
+    // EOF on the terminal reader also posts Render, on another thread. That
+    // message can arrive before ClosePane; it is not a second close.
+    expect_fast_exit_close(&screen_rx);
     let (replayed_resolution, replayed_ack) =
         pty.resolve_layout_commit_with_ack(transaction_id, LayoutCommitOutcome::Committed);
     replayed_resolution.expect("a lost ACK retry must replay without reactivation");
@@ -1046,10 +1045,43 @@ fn fast_exit_callback_waits_for_screen_commit_at_the_common_pty_fence() {
         1,
         "receipt replay must not spawn a second process"
     );
-    assert!(
-        screen_rx.try_recv().is_err(),
-        "a fast exit must fire exactly once"
-    );
+    match screen_rx.try_recv() {
+        Err(_) | Ok((ScreenInstruction::Render, _)) => {},
+        Ok((ScreenInstruction::ClosePane(..), _)) => {
+            panic!("a fast exit must fire exactly once")
+        },
+        Ok((other, _)) => panic!("unexpected screen instruction after replay: {other:?}"),
+    }
+}
+
+fn expect_fast_exit_close(
+    screen_rx: &zellij_utils::channels::Receiver<(ScreenInstruction, ErrorContext)>,
+) {
+    use std::time::{Duration, Instant};
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut closes = 0usize;
+    let mut quiet_since = None;
+    while Instant::now() < deadline {
+        match screen_rx.try_recv() {
+            Ok((ScreenInstruction::ClosePane(PaneId::Terminal(100), ..), _)) => {
+                closes += 1;
+                quiet_since = None;
+                assert_eq!(closes, 1, "a fast exit must fire exactly once");
+            },
+            Ok((ScreenInstruction::Render, _)) => quiet_since = None,
+            Ok((other, _)) => panic!("unexpected screen instruction after fast exit: {other:?}"),
+            Err(_) => {
+                if closes == 1 {
+                    let since = *quiet_since.get_or_insert_with(Instant::now);
+                    if since.elapsed() >= Duration::from_millis(200) {
+                        return;
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            },
+        }
+    }
+    assert_eq!(closes, 1, "fast exit ClosePane did not arrive");
 }
 
 #[test]
