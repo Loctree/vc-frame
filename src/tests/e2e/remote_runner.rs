@@ -113,6 +113,16 @@ fn setup_remote_environment(channel: &mut ssh2::Channel, win_size: Size) {
         .request_pty("xterm", None, Some((columns, rows, 0, 0)))
         .unwrap();
     channel.shell().unwrap();
+    // The initial request carries a 0×0 pixel size. Some SSH servers keep a
+    // default that is a couple of columns off that request, which shifts every
+    // pane border in the snapshot. Repeat the size as a window-change and
+    // apply it in the shell before vc-frame starts.
+    channel
+        .request_pty_size(columns, rows, Some(columns), Some(rows))
+        .unwrap();
+    channel
+        .write_all(format!("stty cols {columns} rows {rows} >/dev/null 2>&1 || true\n").as_bytes())
+        .unwrap();
     channel.write_all(b"export PS1=\"$ \"\n").unwrap();
     channel
         .write_all(
