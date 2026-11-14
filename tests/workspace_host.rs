@@ -536,6 +536,94 @@ fn fixture_socket_owner_pids_for(
     socket_dir: &Path,
     expected_socket: Option<&Path>,
 ) -> Result<BTreeSet<i32>, String> {
+    #[cfg(target_os = "linux")]
+    {
+        linux_socket_owner_pids(socket_dir, expected_socket)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        lsof_socket_owner_pids(socket_dir, expected_socket)
+    }
+}
+
+/// The listening inode in `/proc/net/unix` is not `st_ino` of the socket file.
+/// Match the pathname there, then find the process whose fd is `socket:[inode]`.
+#[cfg(target_os = "linux")]
+fn linux_socket_owner_pids(
+    socket_dir: &Path,
+    expected_socket: Option<&Path>,
+) -> Result<BTreeSet<i32>, String> {
+    let canonical_root = socket_dir
+        .canonicalize()
+        .map_err(|error| format!("cannot canonicalize fixture socket namespace: {error}"))?;
+    let expected_socket = expected_socket
+        .map(|path| {
+            path.canonicalize()
+                .map_err(|error| format!("cannot canonicalize fixture socket: {error}"))
+        })
+        .transpose()?;
+    let table = std::fs::read_to_string("/proc/net/unix")
+        .map_err(|error| format!("cannot read /proc/net/unix: {error}"))?;
+    let mut inodes = BTreeSet::new();
+    for line in table.lines().skip(1) {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() < 8 {
+            continue;
+        }
+        let Ok(inode) = fields[6].parse::<u64>() else {
+            continue;
+        };
+        let path = PathBuf::from(fields[7..].join(" "));
+        let Ok(path) = path.canonicalize() else {
+            continue;
+        };
+        if path.starts_with(&canonical_root)
+            && expected_socket
+                .as_ref()
+                .is_none_or(|expected| path == *expected)
+        {
+            inodes.insert(inode);
+        }
+    }
+    let mut owners = BTreeSet::new();
+    let proc = std::fs::read_dir("/proc").map_err(|error| format!("cannot read /proc: {error}"))?;
+    for entry in proc.flatten() {
+        let Some(pid) = entry
+            .file_name()
+            .to_str()
+            .and_then(|name| name.parse::<i32>().ok())
+        else {
+            continue;
+        };
+        let Ok(fds) = std::fs::read_dir(entry.path().join("fd")) else {
+            continue;
+        };
+        for fd in fds.flatten() {
+            let Ok(target) = std::fs::read_link(fd.path()) else {
+                continue;
+            };
+            let target = target.to_string_lossy();
+            let Some(inode) = target
+                .strip_prefix("socket:[")
+                .and_then(|rest| rest.strip_suffix(']'))
+                .and_then(|inode| inode.parse::<u64>().ok())
+            else {
+                continue;
+            };
+            if inodes.contains(&inode) {
+                owners.insert(pid);
+                break;
+            }
+        }
+    }
+    Ok(owners)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn lsof_socket_owner_pids(
+    socket_dir: &Path,
+    expected_socket: Option<&Path>,
+) -> Result<BTreeSet<i32>, String> {
     let output = Command::new("lsof")
         .args(["-n", "-P", "-U", "-Fpn"])
         .output()
