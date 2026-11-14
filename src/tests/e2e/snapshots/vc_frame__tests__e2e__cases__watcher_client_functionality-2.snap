@@ -2,10 +2,15 @@
 source: src/tests/e2e/cases.rs
 expression: watcher_snapshot
 ---
-        𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍.    ⎮  ▷ N   ◉ Start here [ ]   ○ Shell                         ✍ Composer     · ❯_ Quick cmd       
-SESSIONS 1 · watcher_cli┌ Start here — map of this workspace ──┤ MY FOCUS AND:   ├─────────────────────────────────────┐
- ● Live …               │                                                                                              │
-01 ◉ watcher_client_func│                                                                                              │
+        𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍.    ⎮  ⚿ L   ◉ Launchpad [ ] x +2 + Tab      Voc · ✍ Composer  · Panels  1  · ❯_ Quick cmd  ☾  Aa 
+SESSIONS 1 · Watcher Cli┌ Launchpad ───────────────────────────┤ MY FOCUS AND:   ├─────────────────────────────────────┐
+01 ◉ Watcher Client Func│                                                                                              │
+   ◉ Launchpad          │  LAUNCHPAD                                                                                   │
+   ○ Agents · Agent Work│                                                                                              │
+   ○ ⚠ Shell            │  Launcher missing: /config/.config/vibecrafted/vc-frame/vc-start-here.py                     │
++ Open                  │  Repair: run make install from the Vibecrafted checkout with your verified Runtime Pack      │
+                        │                                                                                              │
+                        │host:~$ █                                                                               │
                         │                                                                                              │
                         │                                                                                              │
                         │                                                                                              │
@@ -19,10 +24,5 @@ SESSIONS 1 · watcher_cli┌ Start here — map of this workspace ──┤ MY F
                         │                                                                                              │
                         │                                                                                              │
                         │                                                                                              │
-                        │                                                                                              │
-                        │                                                                                              │
-                        │                                                                                              │
-                        │                                                                                              │
-                        │                                                                                              │
- 🅵… · 🆇… · 🅽…           └──────────────────────────────────────────────────────────────────────────────────────────────┘
- ⌃g  LOCK  ⌃p  PANE  ⌃t  TAB  ⌃n  RESIZE  ⌃h  MOVE  ⌃s  SEARCH  ⌃o  SESSION                    ...  BASE
+                        └──────────────────────────────────────────────────────────────────────────────────────────────┘
+STATUS
