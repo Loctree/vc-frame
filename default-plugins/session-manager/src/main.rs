@@ -5199,7 +5199,7 @@ mod rail_tests {
         let notice = state.home_notice.clone().unwrap_or_default();
         assert!(
             notice.starts_with("Refused") && notice.contains("Nothing was launched"),
-            "missing destination must refuse, not spawn a substitute shell: {notice}"
+            "missing destination must refuse, not spawn a substitute shell"
         );
         assert!(!state.handle_key(bare(BareKey::Char('x'))));
     }

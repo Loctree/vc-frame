@@ -694,3 +694,52 @@ impl SearchResult {
         self.list_item.render(Some(self.indices.clone()), max_width)
     }
 }
+
+#[cfg(test)]
+mod search_tests {
+    use super::*;
+    use crate::ui::SessionUiInfo;
+    use crate::ui::components::Colors;
+    use std::time::Duration;
+
+    fn session(name: &str, title: &str) -> SessionUiInfo {
+        SessionUiInfo {
+            name: name.to_owned(),
+            title: title.to_owned(),
+            is_operator_frame: false,
+            tabs: Vec::new(),
+            connected_users: 1,
+            is_current_session: false,
+            creation_time: Duration::from_secs(1),
+            rail_order: 1,
+        }
+    }
+
+    #[test]
+    fn search_matches_the_displayed_title_and_routes_by_raw_name() {
+        let mut list = SessionList::default();
+        let title = "vc-frame FUX";
+        list.set_sessions(vec![session("fux-impl-raw", title)], vec![]);
+        let colors = Colors::default();
+
+        list.update_search_term("FUX", &colors);
+        assert_eq!(list.search_results.len(), 1);
+        assert!(
+            list.search_results[0]
+                .indices
+                .iter()
+                .all(|index| *index < title.chars().count()),
+            "highlight indices must address the painted title"
+        );
+        assert_eq!(
+            list.get_selected_session_name().as_deref(),
+            Some("fux-impl-raw")
+        );
+
+        list.update_search_term("fux-impl-raw", &colors);
+        assert!(
+            list.search_results.is_empty(),
+            "the raw session identity is not the search key"
+        );
+    }
+}
