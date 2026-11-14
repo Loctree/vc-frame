@@ -1275,7 +1275,7 @@ fn acquire_rail_order_lock(lock: &Path) -> Result<std::fs::File, String> {
     // makes LockFileEx a blocking exclusive lock. Closing the file releases it.
     const LOCKFILE_EXCLUSIVE_LOCK: u32 = 0x0000_0002;
     #[link(name = "kernel32")]
-    extern "system" {
+    unsafe extern "system" {
         fn LockFileEx(
             file: *mut core::ffi::c_void,
             flags: u32,
@@ -1285,6 +1285,9 @@ fn acquire_rail_order_lock(lock: &Path) -> Result<std::fs::File, String> {
             overlapped: *mut core::ffi::c_void,
         ) -> i32;
     }
+    // SAFETY: the file is a regular handle we just opened without
+    // FILE_FLAG_OVERLAPPED, and the overlapped pointer is null so the lock
+    // call blocks until it owns one byte. Closing `file` releases the lock.
     let locked = unsafe {
         LockFileEx(
             file.as_raw_handle() as *mut _,
