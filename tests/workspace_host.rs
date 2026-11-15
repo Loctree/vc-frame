@@ -8,6 +8,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -1178,6 +1179,16 @@ fn assert_workloads(home: &Path, names: &[&str], expected: &[String]) {
     assert_eq!(current, expected, "exact peer workload PIDs must survive");
 }
 
+/// Both session fixtures cold-load the web plugins. `cargo test` runs the
+/// tests in this binary on several threads, and two overlapping cold loads
+/// miss the NewTab acknowledgement. Hold the guard for the whole fixture,
+/// including cleanup, so those two tests run one at a time. A panicked
+/// holder poisons the mutex; the next fixture still takes it.
+fn session_fixture_lock() -> MutexGuard<'static, ()> {
+    static LOCK: Mutex<()> = Mutex::new(());
+    LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 fn switch_peer(socket_dir: &Path, home: &Path, source: &str, target: &str, tab: &str) {
     let (ok, out) = run_frame(
         socket_dir,
@@ -1196,6 +1207,7 @@ fn switch_peer(socket_dir: &Path, home: &Path, source: &str, target: &str, tab: 
 
 #[test]
 fn attached_frontend_navigates_complete_peers_and_survives_outer_detach() {
+    let _session_fixture = session_fixture_lock();
     let socket_dir = unique_socket_dir();
     let home = socket_dir.join("home");
     std::fs::create_dir_all(&home).unwrap();
@@ -1471,6 +1483,7 @@ fn attached_frontend_navigates_complete_peers_and_survives_outer_detach() {
 
 #[test]
 fn ordinary_attached_peer_navigates_without_host_role_and_preserves_workload() {
+    let _session_fixture = session_fixture_lock();
     let socket_dir = unique_socket_dir();
     let home = socket_dir.join("home");
     std::fs::create_dir_all(&home).unwrap();
