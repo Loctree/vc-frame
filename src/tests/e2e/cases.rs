@@ -246,6 +246,39 @@ pub fn voc_chip_missing_binary_keeps_a_readable_host_pane() {
 // what we do here is adjust snapshots for various race conditions that should hopefully be
 // temporary until we can fix them - when adding stuff here, please add a detailed comment
 // explaining the race condition and what needs to be done to solve it
+/// ` BASE ` is the swap-layout ribbon. On the tab bar it replaces trailing
+/// spaces after the plugins load. Put the spaces back when nothing follows it.
+fn blank_inline_base_ribbon(snapshot: &str) -> String {
+    let marker = " BASE ";
+    let ends_with_newline = snapshot.ends_with('\n');
+    let mut lines = snapshot
+        .lines()
+        .map(|line| {
+            let Some(start) = line.rfind(marker) else {
+                return line.to_owned();
+            };
+            if !line[start + marker.len()..]
+                .chars()
+                .all(|character| character == ' ')
+            {
+                return line.to_owned();
+            }
+            let char_start = line[..start].chars().count();
+            let width = marker.chars().count();
+            let mut chars: Vec<char> = line.chars().collect();
+            for slot in chars.iter_mut().skip(char_start).take(width) {
+                *slot = ' ';
+            }
+            chars.into_iter().collect()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    if ends_with_newline {
+        lines.push('\n');
+    }
+    lines
+}
+
 /// A background "Workspace" session is created beside the e2e session and
 /// sometimes is still absent when the snapshot lands. Drop that one unfocused
 /// row, renumber the e2e session back to `01`, and shift only the left rail
@@ -435,6 +468,9 @@ fn account_for_races_in_snapshot(snapshot: String) -> String {
     let snapshot = base_replace_tmux_mode_2
         .replace_all(&snapshot, "\n")
         .to_string();
+    // The tab bar paints the same BASE swap-layout ribbon on the right of the
+    // session line once plugins finish loading. Blank that ribbon in place.
+    let snapshot = blank_inline_base_ribbon(&snapshot);
     let snapshot = live_replace.replace_all(&snapshot, "").to_string();
     let snapshot = rail_live_replace
         .replace_all(&snapshot, "Live …")
@@ -580,6 +616,28 @@ fn snapshot_normalization_ignores_late_compact_shell_label() {
     // A spinner frame is one extra column on the same label.
     let spinning = "        𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍.    ⎮  ▷ N   ◉ ⠦ Shell  x  + Tab               Voc · ✍ Composer  · Panels  1  · ❯_ Quick cmd  ☾  Aa\n";
     assert_eq!(account_for_races_in_snapshot(spinning.to_owned()), pending);
+}
+
+#[test]
+fn snapshot_normalization_ignores_late_base_swap_ribbon() {
+    let pending = " 𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍. (e2e-test)   ◉ Tab #1  ×                                                                                  \n";
+    let ribbon = " BASE ";
+    let pending_chars: Vec<char> = pending.trim_end_matches('\n').chars().collect();
+    let width = ribbon.chars().count();
+    let landed = format!(
+        "{}{ribbon}\n",
+        pending_chars[..pending_chars.len() - width]
+            .iter()
+            .collect::<String>()
+    );
+    let pending = account_for_races_in_snapshot(pending.to_owned());
+    let landed = account_for_races_in_snapshot(landed);
+    assert_eq!(pending, landed);
+    assert!(!pending.contains("BASE"));
+    assert_eq!(
+        account_for_races_in_snapshot("Alt <[]>  BASE \n".to_owned()),
+        "\n"
+    );
 }
 
 #[test]

@@ -335,6 +335,32 @@ class EvidenceAndCleanupTests(unittest.TestCase):
         )
         self.assertGreater(MODULE.MARKER_NEW_TAB_TIMEOUT_SECS, 45)
 
+    @mock.patch.object(MODULE, "command")
+    def test_triage_retries_one_ambiguous_new_tab_with_durable_capture(
+        self, command: mock.Mock
+    ) -> None:
+        command.side_effect = [
+            AssertionError(
+                "unexpected exit 2: vc-frame triage-run\n"
+                "stderr:\ntriage failed at OpenBucketTab: "
+                "action 'NewTab' did not acknowledge completion within 38s "
+                "(origin tab: preserved, capture durable: true)"
+            ),
+            completed(0, stdout="transferred"),
+        ]
+
+        result = MODULE.triage(pathlib.Path("vc-frame"), {}, "run", 2, "origin")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(command.call_count, 2)
+        self.assertTrue(all(call.kwargs["expect_success"] for call in command.call_args_list))
+
+    @mock.patch.object(MODULE, "command", side_effect=AssertionError("unexpected exit 2: boom"))
+    def test_triage_does_not_retry_a_definite_failure(self, command: mock.Mock) -> None:
+        with self.assertRaisesRegex(AssertionError, "boom"):
+            MODULE.triage(pathlib.Path("vc-frame"), {}, "run", 2, "origin")
+        self.assertEqual(command.call_count, 1)
+
     @mock.patch.object(MODULE.time, "monotonic", side_effect=[0.0, 16.0])
     @mock.patch.object(MODULE, "wait_for_tabs", return_value=[])
     @mock.patch.object(

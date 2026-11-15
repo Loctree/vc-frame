@@ -1973,13 +1973,34 @@ def triage(
         pane_id=pane_id,
         transcript=transcript,
     )
-    return command(
-        binary,
-        env,
-        *args,
-        expect_success=expect_success,
-        timeout=TRIAGE_COMMAND_TIMEOUT_SECS,
-    )
+    # OpenBucketTab persists the viewer reservation before new-tab. When that
+    # acknowledgement expires, the capture is already durable and the origin
+    # tab is preserved, and a second triage-run adopts the pending viewer.
+    # One retry covers a bucket session that was still loading plugins.
+    attempts = 2 if expect_success else 1
+    for attempt in range(attempts):
+        try:
+            return command(
+                binary,
+                env,
+                *args,
+                expect_success=expect_success,
+                timeout=TRIAGE_COMMAND_TIMEOUT_SECS,
+            )
+        except AssertionError as error:
+            message = str(error)
+            retryable = (
+                attempt + 1 < attempts
+                and "did not acknowledge completion" in message
+                and "origin tab: preserved" in message
+                and "capture durable: true" in message
+            )
+            if not retryable:
+                raise
+            print(
+                "triage-run NewTab acknowledgement expired with a durable capture; retrying once",
+                file=sys.stderr,
+            )
 
 
 def write_runtime_transcript_manifest(
