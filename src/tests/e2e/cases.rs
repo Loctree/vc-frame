@@ -282,10 +282,10 @@ fn account_for_races_in_snapshot(snapshot: String) -> String {
     // The sha is this build's commit, so a committed snapshot cannot pin it.
     let generation_replace = Regex::new(r"(\d+\.\d+\.\d+)\+g[0-9a-f]{8}(?:\.dirty)?").unwrap();
     // A missing product launcher falls through to a login shell whose prompt
-    // includes the machine hostname. CI containers get a fresh id each run,
-    // and that id is not a fixed width. Pad the replacement back to the
-    // matched prompt so a longer hostname cannot shift the pane border.
-    let shell_prompt_replace = Regex::new(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}:~\$").unwrap();
+    // includes the machine hostname. CI containers get a fresh id each run.
+    // Swallow the prompt and the cursor that sits on it, then pad after that
+    // cursor so both the cursor column and the pane border stay put.
+    let shell_prompt_replace = Regex::new(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}:~\$(?: █)?").unwrap();
     let snapshot = base_replace.replace_all(&snapshot, "\n").to_string();
     let snapshot = base_replace_tmux_mode_1
         .replace_all(&snapshot, "\n")
@@ -321,7 +321,11 @@ fn account_for_races_in_snapshot(snapshot: String) -> String {
                 .get(0)
                 .map(|capture| capture.as_str())
                 .unwrap_or("");
-            let label = "host:~$";
+            let label = if matched.ends_with('█') {
+                "host:~$ █"
+            } else {
+                "host:~$"
+            };
             if matched.len() > label.len() {
                 format!("{label}{}", " ".repeat(matched.len() - label.len()))
             } else {
@@ -421,11 +425,16 @@ fn snapshot_normalization_keeps_generation_semver_and_drops_build_sha() {
     );
     let dirty = "4.5.1+ga60d44e6.dirty";
     assert_eq!(account_for_races_in_snapshot(dirty.to_owned()), "STATUS");
-    let prompt = "4aa0dee50d3b:~$ █";
-    let normalized_prompt = account_for_races_in_snapshot(prompt.to_owned());
-    assert_eq!(normalized_prompt.chars().count(), prompt.chars().count());
-    assert!(normalized_prompt.starts_with("host:~$"));
-    assert!(normalized_prompt.ends_with('█'));
+    let local_prompt = "zellij-e2e:~$ █    │";
+    let ci_prompt = "abcdefghijkl:~$ █  │";
+    let normalized_local = account_for_races_in_snapshot(local_prompt.to_owned());
+    let normalized_ci = account_for_races_in_snapshot(ci_prompt.to_owned());
+    assert_eq!(normalized_local, normalized_ci);
+    assert_eq!(
+        normalized_local.chars().count(),
+        local_prompt.chars().count()
+    );
+    assert!(normalized_local.starts_with("host:~$ █"));
     assert_eq!(
         account_for_races_in_snapshot("ab:~$ █".to_owned()),
         "host:~$ █"
