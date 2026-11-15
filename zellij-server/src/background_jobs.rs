@@ -1271,9 +1271,19 @@ fn acquire_rail_order_lock(lock: &Path) -> Result<std::fs::File, String> {
             lock.display()
         ));
     }
-    // The handle is opened without FILE_FLAG_OVERLAPPED, so a null OVERLAPPED
-    // makes LockFileEx a blocking exclusive lock. Closing the file releases it.
+    // LockFileEx reads the lock offset from OVERLAPPED even for a synchronous
+    // handle. A null pointer is an access violation. The handle was opened
+    // without FILE_FLAG_OVERLAPPED, so the call blocks, and closing the file
+    // releases the lock.
     const LOCKFILE_EXCLUSIVE_LOCK: u32 = 0x0000_0002;
+    #[repr(C)]
+    struct Overlapped {
+        internal: usize,
+        internal_high: usize,
+        offset: u32,
+        offset_high: u32,
+        event: *mut core::ffi::c_void,
+    }
     #[link(name = "kernel32")]
     unsafe extern "system" {
         fn LockFileEx(
@@ -1282,12 +1292,19 @@ fn acquire_rail_order_lock(lock: &Path) -> Result<std::fs::File, String> {
             reserved: u32,
             bytes_low: u32,
             bytes_high: u32,
-            overlapped: *mut core::ffi::c_void,
+            overlapped: *mut Overlapped,
         ) -> i32;
     }
-    // SAFETY: the file is a regular handle we just opened without
-    // FILE_FLAG_OVERLAPPED, and the overlapped pointer is null so the lock
-    // call blocks until it owns one byte. Closing `file` releases the lock.
+    let mut overlapped = Overlapped {
+        internal: 0,
+        internal_high: 0,
+        offset: 0,
+        offset_high: 0,
+        event: core::ptr::null_mut(),
+    };
+    // SAFETY: `file` is a regular handle we just opened, and `overlapped`
+    // is a live zeroed lock range covering the first byte. The call blocks
+    // until that byte is owned. Closing `file` releases the lock.
     let locked = unsafe {
         LockFileEx(
             file.as_raw_handle() as *mut _,
@@ -1295,7 +1312,7 @@ fn acquire_rail_order_lock(lock: &Path) -> Result<std::fs::File, String> {
             0,
             1,
             0,
-            core::ptr::null_mut(),
+            &mut overlapped,
         )
     };
     if locked == 0 {
