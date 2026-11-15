@@ -246,6 +246,80 @@ pub fn voc_chip_missing_binary_keeps_a_readable_host_pane() {
 // what we do here is adjust snapshots for various race conditions that should hopefully be
 // temporary until we can fix them - when adding stuff here, please add a detailed comment
 // explaining the race condition and what needs to be done to solve it
+/// The active compact-bar chip is `◉ <label>  x`. A default tab keeps the
+/// literal `Tab #1` until the command label replaces it. Restore that literal
+/// and move the difference into the widest interior gap, which is the bar's
+/// flex padding.
+fn stabilize_compact_default_tab_label(snapshot: &str) -> String {
+    let chip = Regex::new(r"◉ (.+?)  x").unwrap();
+    let ends_with_newline = snapshot.ends_with('\n');
+    let mut lines = snapshot
+        .lines()
+        .map(|line| {
+            let Some(name) = chip
+                .captures(line)
+                .and_then(|captures| captures.get(1))
+                .map(|name| name.as_str())
+            else {
+                return line.to_owned();
+            };
+            if name == "Tab #1" {
+                return line.to_owned();
+            }
+            let canonical = "Tab #1";
+            let replaced = line.replacen(&format!("◉ {name}  x"), &format!("◉ {canonical}  x"), 1);
+            resize_widest_interior_gap(
+                &replaced,
+                canonical.chars().count() as isize - name.chars().count() as isize,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    if ends_with_newline {
+        lines.push('\n');
+    }
+    lines
+}
+
+/// `delta` is how many columns the line grew. Give them back to, or take them
+/// from, the widest run of spaces that is not the leading indent.
+fn resize_widest_interior_gap(line: &str, delta: isize) -> String {
+    if delta == 0 {
+        return line.to_owned();
+    }
+    let chars: Vec<char> = line.chars().collect();
+    let mut best: Option<(usize, usize)> = None;
+    let mut index = 0;
+    while index < chars.len() {
+        if chars[index] != ' ' {
+            index += 1;
+            continue;
+        }
+        let start = index;
+        while index < chars.len() && chars[index] == ' ' {
+            index += 1;
+        }
+        if start == 0 {
+            continue;
+        }
+        let len = index - start;
+        if best.is_none_or(|(_, best_len)| len > best_len) {
+            best = Some((start, len));
+        }
+    }
+    let Some((start, len)) = best else {
+        return line.to_owned();
+    };
+    let mut resized = chars;
+    if delta > 0 {
+        let remove = (delta as usize).min(len.saturating_sub(1));
+        resized.drain(start..start + remove);
+    } else {
+        resized.splice(start..start, std::iter::repeat_n(' ', (-delta) as usize));
+    }
+    resized.into_iter().collect()
+}
+
 fn account_for_races_in_snapshot(snapshot: String) -> String {
     // these replacements need to be done because plugins set themselves as "unselectable" at runtime
     // when they are loaded - since they are loaded asynchronously, sometimes the "BASE" indication
@@ -335,6 +409,11 @@ fn account_for_races_in_snapshot(snapshot: String) -> String {
         .to_string();
 
     let snapshot = eol_arrow_replace.replace_all(&snapshot, "\n").to_string();
+    // The compact bar replaces a default "Tab #N" chip with the shell command
+    // label once vc-tab-title's debounce fires. The snapshot can land on
+    // either paint. Put the default chip back and keep the flex gap so the
+    // right-hand cluster stays in the same columns.
+    let snapshot = stabilize_compact_default_tab_label(&snapshot);
     // The status row races through three paints: chip only, chip plus the
     // long shortcut labels, then the same row with the wider published
     // generation (which compresses those labels). The pane contents are the
@@ -414,6 +493,21 @@ fn snapshot_normalization_ignores_dynamic_server_live_counts() {
         let snapshot = format!("status ... LIVE {count:>3}↗\n");
         assert_eq!(account_for_races_in_snapshot(snapshot), "status ... \n");
     }
+}
+
+#[test]
+fn snapshot_normalization_ignores_late_compact_shell_label() {
+    let pending = "        𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍.    ⎮  ▷ N   ◉ Tab #1  x  + Tab                Voc · ✍ Composer  · Panels  1  · ❯_ Quick cmd  ☾  Aa\n";
+    // "Shell" is one column shorter, so the bar's flex gap grows by one.
+    let landed = "        𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍.    ⎮  ▷ N   ◉ Shell  x  + Tab                 Voc · ✍ Composer  · Panels  1  · ❯_ Quick cmd  ☾  Aa\n";
+    let pending = account_for_races_in_snapshot(pending.to_owned());
+    let landed = account_for_races_in_snapshot(landed.to_owned());
+    assert_eq!(pending, landed);
+    assert!(pending.contains("◉ Tab #1  x"));
+    assert!(!landed.contains("Shell"));
+    // A spinner frame is one extra column on the same label.
+    let spinning = "        𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍.    ⎮  ▷ N   ◉ ⠦ Shell  x  + Tab               Voc · ✍ Composer  · Panels  1  · ❯_ Quick cmd  ☾  Aa\n";
+    assert_eq!(account_for_races_in_snapshot(spinning.to_owned()), pending);
 }
 
 #[test]
