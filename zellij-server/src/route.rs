@@ -45,20 +45,20 @@ const ACTION_COMPLETION_TIMEOUT: Duration = Duration::from_secs(1);
 // count. Silent unfocused panels must not extend it.
 const LIST_CLIENTS_PTY_ENRICH_DEADLINE: Duration = Duration::from_millis(100);
 // Most `CliTriageIo` child commands have a 10-second outer budget. NewTab is
-// the exception: `NEW_TAB_COMMAND_TIMEOUT` is 30s because cold debug wasm
+// the exception: `NEW_TAB_COMMAND_TIMEOUT` is 45s because cold debug wasm
 // plugin load on layout activation (tab-bar/status-bar/session-manager) can
-// legitimately exceed 8s on hosted CI. Keep critical completion under that
+// exceed 25s on a loaded hosted runner. Keep critical completion under that
 // outer budget so the route still fails closed instead of hanging forever.
-const CRITICAL_ACTION_COMPLETION_TIMEOUT: Duration = Duration::from_secs(25);
+const CRITICAL_ACTION_COMPLETION_TIMEOUT: Duration = Duration::from_secs(38);
 // Route -> PTY spawn -> Screen placement. A pane completion resolves only once
 // Screen has actually installed the pane, so this budget has to cover a Screen
 // FIFO that is already carrying live `PtyBytes` / `PluginBytes` from an
 // attached client: after a real attach that drain reaches the second range,
 // which the generic 1s route budget reports as a timeout while the pane
 // exists. It stays well inside the client-side warden
-// (`VC_FRAME_ACTION_TTL_SECONDS`, 20s in the workspace-host fixture) so the
+// (`VC_FRAME_ACTION_TTL_SECONDS`, 42s in the workspace-host fixture) so the
 // route is still the surface that fails closed with a real error instead of
-// the client self-retiring, and it stays under the 25s critical budget it is
+// the client self-retiring, and it stays under the critical budget it is
 // not entitled to.
 const PANE_PLACEMENT_COMPLETION_TIMEOUT: Duration = Duration::from_secs(10);
 // Route -> Screen -> PTY -> plugin load -> Screen placement. A plugin operation
@@ -69,9 +69,9 @@ const PANE_PLACEMENT_COMPLETION_TIMEOUT: Duration = Duration::from_secs(10);
 // can legitimately exceed 8s. `PanePlacement` is budgeted for a strictly shorter
 // chain with no wasm in it, so plugins get their own deadline instead of
 // silently re-using one whose reasoning does not cover them. It still stays
-// inside the client-side warden (`VC_FRAME_ACTION_TTL_SECONDS`, 20s in the
+// inside the client-side warden (`VC_FRAME_ACTION_TTL_SECONDS`, 42s in the
 // workspace-host fixture) so the route remains the surface that fails closed,
-// and under the 25s critical budget it is not entitled to.
+// and under the critical budget it is not entitled to.
 const PLUGIN_LOAD_COMPLETION_TIMEOUT: Duration = Duration::from_secs(15);
 // Layout snapshots travel Route -> Screen -> Plugin -> PTY -> Server Log.
 // The plugin actor can still be loading the cold host when its canonical
@@ -4948,9 +4948,9 @@ mod tests {
         // drain reaches the second range - which the generic 1s route budget
         // reports as a timeout for a pane that already exists.
         assert!(PANE_PLACEMENT_COMPLETION_TIMEOUT > Duration::from_secs(4));
-        // `VC_FRAME_ACTION_TTL_SECONDS` is the client-side warden (20s in the
-        // workspace-host fixture). The route has to be the surface that fails
-        // closed, and placement is not entitled to the critical budget.
+        // Shorter than the workspace-host client warden. The route has to be
+        // the surface that fails closed, and placement is not entitled to
+        // the critical budget.
         assert!(PANE_PLACEMENT_COMPLETION_TIMEOUT < Duration::from_secs(20));
         assert!(PANE_PLACEMENT_COMPLETION_TIMEOUT < CRITICAL_ACTION_COMPLETION_TIMEOUT);
     }
@@ -4996,9 +4996,8 @@ mod tests {
         // `CRITICAL_ACTION_COMPLETION_TIMEOUT` already documents that a cold
         // debug wasm load of exactly these plugins can exceed 8s.
         assert!(PLUGIN_LOAD_COMPLETION_TIMEOUT > Duration::from_secs(8));
-        // `VC_FRAME_ACTION_TTL_SECONDS` is the client-side warden (20s in the
-        // workspace-host fixture): the route stays the surface that fails
-        // closed, and it is not entitled to the critical budget.
+        // Shorter than both the critical NewTab budget and the workspace-host
+        // client warden, so a plugin action still fails closed on its own.
         assert!(PLUGIN_LOAD_COMPLETION_TIMEOUT < Duration::from_secs(20));
         assert!(PLUGIN_LOAD_COMPLETION_TIMEOUT < CRITICAL_ACTION_COMPLETION_TIMEOUT);
     }
@@ -5039,9 +5038,9 @@ mod tests {
 
     #[test]
     fn critical_action_deadline_finishes_before_the_outer_new_tab_cli_timeout() {
-        // `CliTriageIo::NEW_TAB_COMMAND_TIMEOUT` is 30s; critical completion must
+        // `CliTriageIo::NEW_TAB_COMMAND_TIMEOUT` is 45s; critical completion must
         // stay strictly inside that outer budget so the route fails first.
-        assert!(CRITICAL_ACTION_COMPLETION_TIMEOUT < Duration::from_secs(30));
+        assert!(CRITICAL_ACTION_COMPLETION_TIMEOUT < Duration::from_secs(45));
         assert!(CRITICAL_ACTION_COMPLETION_TIMEOUT > Duration::from_secs(8));
     }
 

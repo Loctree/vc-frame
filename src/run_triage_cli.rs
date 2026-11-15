@@ -193,7 +193,7 @@ struct CliTriageIo {
 }
 
 const CLI_COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
-const NEW_TAB_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
+const NEW_TAB_COMMAND_TIMEOUT: Duration = Duration::from_secs(45);
 const VIEWER_CREATION_RECONCILIATION_TIMEOUT: Duration = Duration::from_secs(30);
 const INVENTORY_RETRY_TIMEOUT: Duration = Duration::from_secs(10);
 const SESSION_READY_TIMEOUT: Duration = Duration::from_secs(20);

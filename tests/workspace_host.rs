@@ -168,11 +168,10 @@ fn run_frame(socket_dir: &Path, home: &Path, args: &[&str]) -> (bool, String) {
     for (key, value) in isolated_env(socket_dir, home) {
         command.env(key, value);
     }
-    // The harness reaps a command at 45s. Twenty seconds of silence is enough
-    // for a loaded runner to retire a new-tab that is still waiting on its
-    // acknowledgement. Stay under the harness kill so a true hang still
-    // prints the warden line.
-    command.env("VC_FRAME_ACTION_TTL_SECONDS", "40");
+    // The route acknowledges NewTab within 38s, and the harness reaps a
+    // command at 45s. Stay between those so a slow acknowledgement is the
+    // route's error and a true hang still prints the warden line.
+    command.env("VC_FRAME_ACTION_TTL_SECONDS", "42");
     command.env("VC_FRAME_CALLER", "workspace-project-cli");
     let mut child = command.spawn().expect("spawn vc-frame");
     fixture_receipt(

@@ -2221,7 +2221,7 @@ fn open_command_pane_in_place_of_pane_id(
             Some(NotificationEnd::new(completion_tx)),
         ));
 
-    // `true` is `critical_completion`: the 25s PTY spawn/replace budget
+    // `true` is `critical_completion`: the 38s PTY spawn/replace budget
     // (`CRITICAL_ACTION_COMPLETION_TIMEOUT`), not wait-forever and not the
     // visitor ACK. A completed spawn is not a Handled receipt and cannot
     // mint an async projection false-positive.
