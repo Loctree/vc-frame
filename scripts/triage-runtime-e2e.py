@@ -267,6 +267,11 @@ TRIAGE_COMMAND_TIMEOUT_SECS = 120
 # pane. A 30s harness kill fires before the CLI returns, so a slow
 # acknowledgement never reaches the poll. Stay above the CLI budget.
 MARKER_NEW_TAB_TIMEOUT_SECS = 60
+# A successful acknowledgement only needs a short materialize poll. An
+# ambiguous one means the route stopped waiting while the tab may still
+# appear, so keep watching before treating the action as lost.
+MARKER_MATERIALIZE_SECS = 15
+AMBIGUOUS_MARKER_MATERIALIZE_SECS = 45
 
 
 def command(
@@ -1553,7 +1558,53 @@ def create_marker_tab_with_markers(
         for tab in wait_for_tabs(binary, env, session)
         if tab.get("name") == name and isinstance(tab.get("tab_id"), int)
     }
-    new_tab_result = command(
+    layout = marker_layout_for_markers(markers)
+    new_tab_result = _open_marker_tab(binary, env, session, name, layout)
+    found = _poll_marker_tab(
+        binary,
+        env,
+        session,
+        name,
+        markers,
+        existing_tab_ids,
+        _marker_materialize_secs(new_tab_result),
+    )
+    if found is None and _ambiguous_new_tab(new_tab_result) and not _new_named_tab_ids(
+        binary, env, session, name, existing_tab_ids
+    ):
+        # Nothing was created. One more new-tab is safe; a second one after a
+        # late first tab would make the name ambiguous, so that case is not
+        # retried.
+        print(
+            f"marker tab {session}/{name} did not appear after an ambiguous NewTab; retrying once",
+            file=sys.stderr,
+        )
+        new_tab_result = _open_marker_tab(binary, env, session, name, layout)
+        found = _poll_marker_tab(
+            binary,
+            env,
+            session,
+            name,
+            markers,
+            existing_tab_ids,
+            _marker_materialize_secs(new_tab_result),
+        )
+    if found is not None:
+        return found
+    raise AssertionError(
+        f"tab {session}/{name} did not materialize {len(markers)} new terminal pane(s); "
+        f"new-tab exit={new_tab_result.returncode}, stderr={new_tab_result.stderr!r}"
+    )
+
+
+def _open_marker_tab(
+    binary: pathlib.Path,
+    env: dict[str, str],
+    session: str,
+    name: str,
+    layout: str,
+) -> subprocess.CompletedProcess[str]:
+    return command(
         binary,
         env,
         "-s",
@@ -1563,11 +1614,46 @@ def create_marker_tab_with_markers(
         "--name",
         name,
         "--layout-string",
-        marker_layout_for_markers(markers),
+        layout,
         expect_success=None,
         timeout=MARKER_NEW_TAB_TIMEOUT_SECS,
     )
-    deadline = time.monotonic() + 15
+
+
+def _ambiguous_new_tab(result: subprocess.CompletedProcess[str]) -> bool:
+    return result.returncode != 0 and "did not acknowledge completion" in (result.stderr or "")
+
+
+def _marker_materialize_secs(result: subprocess.CompletedProcess[str]) -> float:
+    if _ambiguous_new_tab(result):
+        return AMBIGUOUS_MARKER_MATERIALIZE_SECS
+    return MARKER_MATERIALIZE_SECS
+
+
+def _new_named_tab_ids(
+    binary: pathlib.Path,
+    env: dict[str, str],
+    session: str,
+    name: str,
+    existing_tab_ids: set[int],
+) -> set[int]:
+    return {
+        int(tab["tab_id"])
+        for tab in wait_for_tabs(binary, env, session)
+        if tab.get("name") == name and isinstance(tab.get("tab_id"), int)
+    } - existing_tab_ids
+
+
+def _poll_marker_tab(
+    binary: pathlib.Path,
+    env: dict[str, str],
+    session: str,
+    name: str,
+    markers: list[str],
+    existing_tab_ids: set[int],
+    window: float,
+) -> tuple[int, list[int]] | None:
+    deadline = time.monotonic() + window
     while time.monotonic() < deadline:
         try:
             tab_id = tab_identity(binary, env, session, name)
@@ -1577,10 +1663,7 @@ def create_marker_tab_with_markers(
         except AssertionError:
             pass
         time.sleep(0.1)
-    raise AssertionError(
-        f"tab {session}/{name} did not materialize {len(markers)} new terminal pane(s); "
-        f"new-tab exit={new_tab_result.returncode}, stderr={new_tab_result.stderr!r}"
-    )
+    return None
 
 
 def wait_for_marker(

@@ -335,6 +335,38 @@ class EvidenceAndCleanupTests(unittest.TestCase):
         )
         self.assertGreater(MODULE.MARKER_NEW_TAB_TIMEOUT_SECS, 45)
 
+    @mock.patch.object(MODULE.time, "sleep")
+    @mock.patch.object(MODULE.time, "monotonic", side_effect=[0.0, 50.0, 50.0, 50.0])
+    @mock.patch.object(MODULE, "terminal_panes", return_value=[10, 11])
+    @mock.patch.object(MODULE, "tab_identity", return_value=7)
+    @mock.patch.object(MODULE, "wait_for_tabs", return_value=[])
+    @mock.patch.object(MODULE, "command")
+    def test_marker_tab_reissues_one_ambiguous_new_tab_that_created_nothing(
+        self,
+        command: mock.Mock,
+        _wait_for_tabs: mock.Mock,
+        _tab_identity: mock.Mock,
+        _terminal_panes: mock.Mock,
+        _monotonic: mock.Mock,
+        _sleep: mock.Mock,
+    ) -> None:
+        command.side_effect = [
+            completed(2, stderr="action 'NewTab' did not acknowledge completion within 38s"),
+            completed(0),
+        ]
+
+        self.assertEqual(
+            MODULE.create_marker_tab_with_markers(
+                pathlib.Path("vc-frame"),
+                {},
+                "headless",
+                "transcript",
+                ["ONE", "TWO"],
+            ),
+            (7, [10, 11]),
+        )
+        self.assertEqual(command.call_count, 2)
+
     @mock.patch.object(MODULE, "command")
     def test_triage_retries_one_ambiguous_new_tab_with_durable_capture(
         self, command: mock.Mock
@@ -361,7 +393,7 @@ class EvidenceAndCleanupTests(unittest.TestCase):
             MODULE.triage(pathlib.Path("vc-frame"), {}, "run", 2, "origin")
         self.assertEqual(command.call_count, 1)
 
-    @mock.patch.object(MODULE.time, "monotonic", side_effect=[0.0, 16.0])
+    @mock.patch.object(MODULE.time, "monotonic", side_effect=[0.0, 50.0, 50.0, 100.0])
     @mock.patch.object(MODULE, "wait_for_tabs", return_value=[])
     @mock.patch.object(
         MODULE,
