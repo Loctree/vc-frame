@@ -256,12 +256,17 @@ def validate_build_info(
 COMMAND_TIMEOUT_SECS = 30
 # Nested CLI budgets in src/run_triage_cli.rs for a full triage-run transfer:
 #   CLI_COMMAND_TIMEOUT = 10s (inventory / capture / close chain)
-#   NEW_TAB_COMMAND_TIMEOUT = 30s
+#   NEW_TAB_COMMAND_TIMEOUT = 45s
 #   VIEWER_CREATION_RECONCILIATION_TIMEOUT = 30s
 # Matching the outer harness to 30s races those inner budgets and kills
 # transfers mid-viewer-creation on slower Linux runners (ops-linux
 # TimeoutExpired on triage-run for the exit-2 case). Only triage() uses this.
 TRIAGE_COMMAND_TIMEOUT_SECS = 120
+# Marker tabs go through the same new-tab action. The CLI keeps that call
+# alive for NEW_TAB_COMMAND_TIMEOUT (45s) and then the harness polls for the
+# pane. A 30s harness kill fires before the CLI returns, so a slow
+# acknowledgement never reaches the poll. Stay above the CLI budget.
+MARKER_NEW_TAB_TIMEOUT_SECS = 60
 
 
 def command(
@@ -1560,6 +1565,7 @@ def create_marker_tab_with_markers(
         "--layout-string",
         marker_layout_for_markers(markers),
         expect_success=None,
+        timeout=MARKER_NEW_TAB_TIMEOUT_SECS,
     )
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline:

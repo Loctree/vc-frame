@@ -246,6 +246,74 @@ pub fn voc_chip_missing_binary_keeps_a_readable_host_pane() {
 // what we do here is adjust snapshots for various race conditions that should hopefully be
 // temporary until we can fix them - when adding stuff here, please add a detailed comment
 // explaining the race condition and what needs to be done to solve it
+/// A background "Workspace" session is created beside the e2e session and
+/// sometimes is still absent when the snapshot lands. Drop that one unfocused
+/// row, renumber the e2e session back to `01`, and shift only the left rail
+/// so the pane text stays on the same lines.
+fn drop_optional_unfocused_workspace_session(snapshot: &str) -> String {
+    let ends_with_newline = snapshot.ends_with('\n');
+    let mut lines: Vec<String> = snapshot.lines().map(str::to_owned).collect();
+    let Some(row) = lines.iter().position(|line| {
+        line.split_once('│')
+            .is_some_and(|(left, _)| left.trim() == "01 ○ Workspace")
+    }) else {
+        return snapshot.to_owned();
+    };
+    let Some(next_left) = lines
+        .get(row + 1)
+        .and_then(|line| line.split_once('│').map(|(left, _)| left.to_owned()))
+    else {
+        return snapshot.to_owned();
+    };
+    if !next_left.trim_start().starts_with("02 ") {
+        return snapshot.to_owned();
+    }
+    if row > 0 {
+        lines[row - 1] = lines[row - 1].replacen("SESSIONS 2", "SESSIONS 1", 1);
+    }
+    let mut index = row;
+    while index + 1 < lines.len() {
+        let Some((dest_left, dest_right)) = lines[index].split_once('│') else {
+            break;
+        };
+        let dest_width = dest_left.chars().count();
+        let dest_right = dest_right.to_owned();
+        let Some((src_left, _)) = lines[index + 1].split_once('│') else {
+            break;
+        };
+        let mut src_left = src_left.to_owned();
+        if index == row {
+            let indent = src_left
+                .chars()
+                .take_while(|character| *character == ' ')
+                .count();
+            let trimmed: String = src_left.chars().skip(indent).collect();
+            if let Some(rest) = trimmed.strip_prefix("02 ") {
+                src_left = format!("{}01 {rest}", " ".repeat(indent));
+            }
+        }
+        lines[index] = format!("{}│{dest_right}", fit_to_columns(&src_left, dest_width));
+        index += 1;
+    }
+    if let Some((left, right)) = lines[index].split_once('│') {
+        let width = left.chars().count();
+        lines[index] = format!("{}│{right}", " ".repeat(width));
+    }
+    let mut joined = lines.join("\n");
+    if ends_with_newline {
+        joined.push('\n');
+    }
+    joined
+}
+
+fn fit_to_columns(text: &str, width: usize) -> String {
+    let mut chars: Vec<char> = text.chars().collect();
+    if chars.len() < width {
+        chars.extend(std::iter::repeat_n(' ', width - chars.len()));
+    }
+    chars.into_iter().collect()
+}
+
 /// The active compact-bar chip is `◉ <label>  x`. A default tab keeps the
 /// literal `Tab #1` until the command label replaces it. Restore that literal
 /// and move the difference into the widest interior gap, which is the bar's
@@ -409,6 +477,10 @@ fn account_for_races_in_snapshot(snapshot: String) -> String {
         .to_string();
 
     let snapshot = eol_arrow_replace.replace_all(&snapshot, "\n").to_string();
+    // The e2e session list sometimes includes an unfocused Workspace row that
+    // was created in the background and sometimes does not. Drop that row
+    // before the chip rewrite so both paints compare equal.
+    let snapshot = drop_optional_unfocused_workspace_session(&snapshot);
     // The compact bar replaces a default "Tab #N" chip with the shell command
     // label once vc-tab-title's debounce fires. The snapshot can land on
     // either paint. Put the default chip back and keep the flex gap so the
@@ -508,6 +580,41 @@ fn snapshot_normalization_ignores_late_compact_shell_label() {
     // A spinner frame is one extra column on the same label.
     let spinning = "        𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍.    ⎮  ▷ N   ◉ ⠦ Shell  x  + Tab               Voc · ✍ Composer  · Panels  1  · ❯_ Quick cmd  ☾  Aa\n";
     assert_eq!(account_for_races_in_snapshot(spinning.to_owned()), pending);
+}
+
+#[test]
+fn snapshot_normalization_ignores_launchpad_chip_and_workspace_row() {
+    let launchpad = "        𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍.    ⎮  ▷ N   ◉ Launchpad  x +2 + Tab         Voc · ✍ Composer  · Panels  1  · ❯_ Quick cmd  ☾  Aa \n";
+    let canonical = "        𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍.    ⎮  ▷ N   ◉ Tab #1  x +2 + Tab            Voc · ✍ Composer  · Panels  1  · ❯_ Quick cmd  ☾  Aa \n";
+    assert_eq!(
+        account_for_races_in_snapshot(launchpad.to_owned()),
+        account_for_races_in_snapshot(canonical.to_owned())
+    );
+    assert!(account_for_races_in_snapshot(launchpad.to_owned()).contains("◉ Tab #1  x"));
+    // A cursor block has one space before `x` and is a real tab name.
+    let cursor_block = "◉ Launchpad [ ] x";
+    assert!(account_for_races_in_snapshot(cursor_block.to_owned()).contains(cursor_block));
+
+    let with_workspace = "\
+SESSIONS 2 · E2e Test│pane
+01 ○ Workspace      │
+02 ◉ E2e Test       │BODY
+   ◉ Launchpad      │
++ Open              │
+                    │
+";
+    let without_workspace = "\
+SESSIONS 1 · E2e Test│pane
+01 ◉ E2e Test       │
+   ◉ Launchpad      │BODY
++ Open              │
+                    │
+                    │
+";
+    assert_eq!(
+        account_for_races_in_snapshot(with_workspace.to_owned()),
+        account_for_races_in_snapshot(without_workspace.to_owned())
+    );
 }
 
 #[test]

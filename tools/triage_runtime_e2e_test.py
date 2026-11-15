@@ -330,6 +330,10 @@ class EvidenceAndCleanupTests(unittest.TestCase):
             (7, [10, 11]),
         )
         self.assertIsNone(command.call_args.kwargs["expect_success"])
+        self.assertEqual(
+            command.call_args.kwargs["timeout"], MODULE.MARKER_NEW_TAB_TIMEOUT_SECS
+        )
+        self.assertGreater(MODULE.MARKER_NEW_TAB_TIMEOUT_SECS, 45)
 
     @mock.patch.object(MODULE.time, "monotonic", side_effect=[0.0, 16.0])
     @mock.patch.object(MODULE, "wait_for_tabs", return_value=[])

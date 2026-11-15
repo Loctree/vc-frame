@@ -2,14 +2,14 @@
 source: src/tests/e2e/cases.rs
 expression: last_snapshot
 ---
-        𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍.    ⎮  ▷ N   ◉ Launchpad  x +2 + Tab         Voc · ✍ Composer  · Panels  1  · ❯_ Quick cmd  ☾  Aa 
-SESSIONS 2 · E2e Test   ┌ Launchpad ───────────────────────────────────────────────────────────────────────────────────┐
-01 ○ Workspace          │                                                                                              │
-02 ◉ E2e Test           │  LAUNCHPAD                                                                                   │
-   ◉ Launchpad          │                                                                                              │
-   ○ Agents · Agent Work│  Launcher missing: /config/.config/vibecrafted/vc-frame/vc-start-here.py                     │
-   ○ ⚠ Shell            │  Repair: run make install from the Vibecrafted checkout with your verified Runtime Pack      │
-+ Open                  │                                                                                              │
+        𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍.    ⎮  ▷ N   ◉ Tab #1  x +2 + Tab            Voc · ✍ Composer  · Panels  1  · ❯_ Quick cmd  ☾  Aa 
+SESSIONS 1 · E2e Test   ┌ Launchpad ───────────────────────────────────────────────────────────────────────────────────┐
+01 ◉ E2e Test           │                                                                                              │
+   ◉ Launchpad          │  LAUNCHPAD                                                                                   │
+   ○ Agents · Agent Work│                                                                                              │
+   ○ ⚠ Shell            │  Launcher missing: /config/.config/vibecrafted/vc-frame/vc-start-here.py                     │
++ Open                  │  Repair: run make install from the Vibecrafted checkout with your verified Runtime Pack      │
+                        │                                                                                              │
                         │host:~$ █                                                                                     │
                         │                                                                                              │
                         │                                                                                              │

@@ -2,7 +2,7 @@
 source: src/tests/e2e/cases.rs
 expression: last_snapshot
 ---
-        𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍.    ⎮  ▷ N   ◉ Launchpad  x +2 + Tab         Voc · ✍ Composer  · Panels  1  · ❯_ Quick cmd  ☾  Aa 
+        𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍.    ⎮  ▷ N   ◉ Tab #1  x +2 + Tab            Voc · ✍ Composer  · Panels  1  · ❯_ Quick cmd  ☾  Aa 
 SESSIONS 1 · E2e Test   ┌ Launchpad ───────────────────────────────────────────────────────────────────────────────────┐
 01 ◉ E2e Test           │                                                                                              │
    ◉ Launchpad          │  LAUNCHPAD                                                                                   │
