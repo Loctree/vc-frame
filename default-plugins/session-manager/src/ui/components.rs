@@ -21,7 +21,10 @@ impl ListItem {
     pub fn from_session_info(session_ui_info: &SessionUiInfo, colors: Colors) -> Self {
         let session_ui_line = build_session_ui_line(session_ui_info, colors);
         ListItem {
-            name: session_ui_info.name.clone(),
+            // Search and highlight the title the row actually paints. Attach,
+            // kill, and switch keep using SessionUiInfo.name, which
+            // SessionList stores beside this item.
+            name: session_ui_info.title.clone(),
             session_name: Some(session_ui_line),
             tab_name: None,
             pane_name: None,
@@ -383,7 +386,7 @@ pub fn build_session_ui_line(session_ui_info: &SessionUiInfo, colors: Colors) ->
     let tab_count_styled = colors.tab_count(&tab_count);
     let total_pane_count = format!("{}", total_pane_count_text);
     let total_pane_count_styled = colors.pane_count(&total_pane_count);
-    let session_name = &session_ui_info.name;
+    let session_name = &session_ui_info.title;
     let connected_users = format!("{}", session_ui_info.connected_users);
     let connected_users_styled = colors.connected_users(&connected_users);
     let session_bullet_span =

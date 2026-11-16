@@ -78,8 +78,13 @@ impl SessionList {
         mut session_ui_infos: Vec<SessionUiInfo>,
         mut forbidden_sessions: Vec<SessionUiInfo>,
     ) {
-        // Launch order is the canonical rail order: the session started first
-        // holds slot 01 for as long as it lives, and when a session dies the
+        let selected_session_name = self
+            .selected_index
+            .0
+            .and_then(|index| self.session_ui_infos.get(index))
+            .map(|session| session.name.clone());
+        // The role-marked Operator peer is first (00). Launch order gives
+        // project peers stable 01+ slots, and when a session dies the
         // ones below move up one slot. Activation, clicks and attach must
         // never reshuffle the rail — every plugin instance sees a different
         // `is_current_session`, so any current-dependent order makes each
@@ -87,14 +92,37 @@ impl SessionList {
         // deterministic tie-break (equal or missing creation times, e.g.
         // when another session's metadata has not been read yet).
         let launch_order = |a: &SessionUiInfo, b: &SessionUiInfo| {
-            a.creation_time
-                .cmp(&b.creation_time)
+            b.is_operator_frame
+                .cmp(&a.is_operator_frame)
+                .then_with(|| (a.rail_order == 0).cmp(&(b.rail_order == 0)))
+                .then_with(|| a.rail_order.cmp(&b.rail_order))
+                // `creation_time` is elapsed socket age and changes on every
+                // tick. It is only a legacy fallback while no durable slot is
+                // available; equal durable slots use the stable name tie-break.
+                .then_with(|| {
+                    if a.rail_order == 0 && b.rail_order == 0 {
+                        a.creation_time.cmp(&b.creation_time)
+                    } else {
+                        std::cmp::Ordering::Equal
+                    }
+                })
                 .then_with(|| a.name.cmp(&b.name))
         };
         session_ui_infos.sort_unstable_by(launch_order);
         forbidden_sessions.sort_unstable_by(launch_order);
         self.session_ui_infos = session_ui_infos;
         self.forbidden_sessions = forbidden_sessions;
+        if let Some(selected_session_name) = selected_session_name {
+            if let Some(new_index) = self
+                .session_ui_infos
+                .iter()
+                .position(|session| session.name == selected_session_name)
+            {
+                self.selected_index.0 = Some(new_index);
+            } else {
+                self.selected_index.reset();
+            }
+        }
     }
     pub fn render(&self, max_rows: usize, max_cols: usize, colors: Colors) -> Vec<LineToRender> {
         if self.is_searching {
@@ -664,5 +692,54 @@ impl SearchResult {
     }
     pub fn render(&self, max_width: usize) -> Vec<LineToRender> {
         self.list_item.render(Some(self.indices.clone()), max_width)
+    }
+}
+
+#[cfg(test)]
+mod search_tests {
+    use super::*;
+    use crate::ui::SessionUiInfo;
+    use crate::ui::components::Colors;
+    use std::time::Duration;
+
+    fn session(name: &str, title: &str) -> SessionUiInfo {
+        SessionUiInfo {
+            name: name.to_owned(),
+            title: title.to_owned(),
+            is_operator_frame: false,
+            tabs: Vec::new(),
+            connected_users: 1,
+            is_current_session: false,
+            creation_time: Duration::from_secs(1),
+            rail_order: 1,
+        }
+    }
+
+    #[test]
+    fn search_matches_the_displayed_title_and_routes_by_raw_name() {
+        let mut list = SessionList::default();
+        let title = "vc-frame FUX";
+        list.set_sessions(vec![session("fux-impl-raw", title)], vec![]);
+        let colors = Colors::default();
+
+        list.update_search_term("FUX", &colors);
+        assert_eq!(list.search_results.len(), 1);
+        assert!(
+            list.search_results[0]
+                .indices
+                .iter()
+                .all(|index| *index < title.chars().count()),
+            "highlight indices must address the painted title"
+        );
+        assert_eq!(
+            list.get_selected_session_name().as_deref(),
+            Some("fux-impl-raw")
+        );
+
+        list.update_search_term("fux-impl-raw", &colors);
+        assert!(
+            list.search_results.is_empty(),
+            "the raw session identity is not the search key"
+        );
     }
 }

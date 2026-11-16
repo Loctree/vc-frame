@@ -1,0 +1,17 @@
+#!/bin/bash
+# Refuse sweep-exemption markers (.noclean) at any path.
+# The marker pinned ~47 GB of target/ on a full disk; builds died of ENOSPC
+# mid-run. Banned by Founder decision 2026-09-21 — see commit b0f64de39.
+set -euo pipefail
+
+# `grep -q` exits at the first hit and closes the pipe. With `pipefail`, git
+# then dies with SIGPIPE (141) and the `if` sees failure even though a
+# `.noclean` path was staged, so the commit is allowed. Read the full list
+# before matching so git is not a pipeline peer of grep.
+staged_paths=$(git diff --cached --name-only --diff-filter=ACM)
+if grep -E -q '(^|/)\.noclean$' <<< "$staged_paths"; then
+  echo "pre-commit: refused — .noclean sweep-exemption markers are banned in this repository." >&2
+  echo "pre-commit: see commit b0f64de39 (Founder decision 2026-09-21): keep the disk healthy," >&2
+  echo "pre-commit: do not pin giant target/ directories away from the cleaner." >&2
+  exit 1
+fi

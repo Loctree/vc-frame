@@ -71,6 +71,7 @@ pub const MOVE_TAB_RIGHT: [u8; 2] = [27, 111]; // Alt + o
 
 pub const SESSION_MODE: [u8; 1] = [15]; // ctrl-o
 pub const DETACH_IN_SESSION_MODE: [u8; 1] = [100]; // d
+pub const VOC_IN_SESSION_MODE: [u8; 1] = [118]; // v
 
 pub const BRACKETED_PASTE_START: [u8; 6] = [27, 91, 50, 48, 48, 126]; // \u{1b}[200~
 pub const BRACKETED_PASTE_END: [u8; 6] = [27, 91, 50, 48, 49, 126]; // \u{1b}[201
@@ -91,9 +92,335 @@ pub fn sgr_mouse_report(position: Position, button: u8) -> Vec<u8> {
         .to_vec()
 }
 
+fn sgr_mouse_release_report(position: Position, button: u8) -> Vec<u8> {
+    let Position { line, column } = position;
+    format!("\u{1b}[<{};{};{}m", button, column.0, line.0)
+        .as_bytes()
+        .to_vec()
+}
+
+fn voc_chip_click_position(remote_terminal: &RemoteTerminal) -> Option<Position> {
+    let top_line = remote_terminal.lines().into_iter().next()?;
+    let voc_start = top_line.find("Voc")?;
+    // SGR mouse coordinates are 1-based display cells, not Unicode scalar
+    // indices. The Vibecrafted wordmark contains wide glyphs, so counting
+    // chars points left of the chip in the real frame. Aim at its middle.
+    let click_column = zellij_utils::shared::ansi_len(&top_line[..voc_start]) + 2;
+    Some(Position::new(1, click_column.try_into().ok()?))
+}
+
+fn click_voc_chip(remote_terminal: &mut RemoteTerminal) -> bool {
+    let Some(position) = voc_chip_click_position(remote_terminal) else {
+        return false;
+    };
+    remote_terminal.send_key(&sgr_mouse_report(position, 0));
+    remote_terminal.send_key(&sgr_mouse_release_report(position, 0));
+    true
+}
+
+#[test]
+#[ignore]
+pub fn voc_chip_opens_and_focuses_single_host_console() {
+    let fake_win_size = Size {
+        cols: 140,
+        rows: 32,
+    };
+    RemoteRunner::kill_running_sessions(fake_win_size);
+    let mut runner = RemoteRunner::new_mirrored_session_with_layout(fake_win_size, "voc-host.kdl")
+        .add_step(Step {
+            name: "Click the Voc chip",
+            instruction: |mut remote_terminal: RemoteTerminal| -> bool {
+                remote_terminal.top_bar_appears() && click_voc_chip(&mut remote_terminal)
+            },
+        })
+        .add_step(Step {
+            name: "Voc process is alive in the host pane",
+            instruction: |remote_terminal: RemoteTerminal| -> bool {
+                remote_terminal.snapshot_contains("VOC_E2E_READY launch=1")
+            },
+        })
+        .add_step(Step {
+            name: "Hide the Voc floating pane",
+            instruction: |mut remote_terminal: RemoteTerminal| -> bool {
+                if !remote_terminal.snapshot_contains("VOC_E2E_READY launch=1") {
+                    return false;
+                }
+                remote_terminal.send_key(&PANE_MODE);
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                remote_terminal.send_key(&TOGGLE_FLOATING_PANES);
+                true
+            },
+        })
+        .add_step(Step {
+            name: "Voc pane is hidden before the repeat click",
+            instruction: |remote_terminal: RemoteTerminal| -> bool {
+                !remote_terminal.snapshot_contains("VOC_E2E_READY launch=1")
+            },
+        })
+        .add_step(Step {
+            name: "Click Voc again to focus it",
+            instruction: |mut remote_terminal: RemoteTerminal| -> bool {
+                remote_terminal.top_bar_appears() && click_voc_chip(&mut remote_terminal)
+            },
+        })
+        .add_step(Step {
+            name: "Second click focuses instead of spawning",
+            instruction: |remote_terminal: RemoteTerminal| -> bool {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                remote_terminal.snapshot_contains("VOC_E2E_READY launch=1")
+                    && !remote_terminal.snapshot_contains("VOC_E2E_READY launch=2")
+            },
+        })
+        .add_step(Step {
+            name: "Hide Voc again before the keybind",
+            instruction: |mut remote_terminal: RemoteTerminal| -> bool {
+                if !remote_terminal.snapshot_contains("VOC_E2E_READY launch=1") {
+                    return false;
+                }
+                remote_terminal.send_key(&PANE_MODE);
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                remote_terminal.send_key(&TOGGLE_FLOATING_PANES);
+                true
+            },
+        })
+        .add_step(Step {
+            name: "Session-v keybind focuses the same Voc pane",
+            instruction: |mut remote_terminal: RemoteTerminal| -> bool {
+                if remote_terminal.snapshot_contains("VOC_E2E_READY launch=1") {
+                    return false;
+                }
+                remote_terminal.send_key(&SESSION_MODE);
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                remote_terminal.send_key(&VOC_IN_SESSION_MODE);
+                true
+            },
+        })
+        .add_step(Step {
+            name: "Keybind also preserves the singleton",
+            instruction: |remote_terminal: RemoteTerminal| -> bool {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                remote_terminal.snapshot_contains("VOC_E2E_READY launch=1")
+                    && !remote_terminal.snapshot_contains("VOC_E2E_READY launch=2")
+            },
+        });
+    runner.run_all_steps();
+}
+
+#[test]
+#[ignore]
+pub fn voc_chip_missing_binary_keeps_a_readable_host_pane() {
+    let fake_win_size = Size {
+        cols: 140,
+        rows: 32,
+    };
+    RemoteRunner::kill_running_sessions(fake_win_size);
+    let mut runner = RemoteRunner::new_mirrored_session_with_layout(fake_win_size, "voc-host.kdl")
+        .add_step(Step {
+            name: "Make the fixture resolver report a missing voc binary",
+            instruction: |mut remote_terminal: RemoteTerminal| -> bool {
+                if !remote_terminal.top_bar_appears() {
+                    return false;
+                }
+                remote_terminal.send_key(b"touch \"$XDG_CACHE_HOME/force-voc-missing\"\n");
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                true
+            },
+        })
+        .add_step(Step {
+            name: "Click Voc with no resolvable binary",
+            instruction: |mut remote_terminal: RemoteTerminal| -> bool {
+                click_voc_chip(&mut remote_terminal)
+            },
+        })
+        .add_step(Step {
+            name: "Missing voc stays readable in the host pane",
+            instruction: |remote_terminal: RemoteTerminal| -> bool {
+                remote_terminal.snapshot_contains(
+                    "Voc console unavailable: the resolved voc binary is missing.",
+                )
+            },
+        });
+    runner.run_all_steps();
+}
+
 // what we do here is adjust snapshots for various race conditions that should hopefully be
 // temporary until we can fix them - when adding stuff here, please add a detailed comment
 // explaining the race condition and what needs to be done to solve it
+/// ` BASE ` is the swap-layout ribbon. On the tab bar it replaces trailing
+/// spaces after the plugins load. Put the spaces back when nothing follows it.
+fn blank_inline_base_ribbon(snapshot: &str) -> String {
+    let marker = " BASE ";
+    let ends_with_newline = snapshot.ends_with('\n');
+    let mut lines = snapshot
+        .lines()
+        .map(|line| {
+            let Some(start) = line.rfind(marker) else {
+                return line.to_owned();
+            };
+            if !line[start + marker.len()..]
+                .chars()
+                .all(|character| character == ' ')
+            {
+                return line.to_owned();
+            }
+            let char_start = line[..start].chars().count();
+            let width = marker.chars().count();
+            let mut chars: Vec<char> = line.chars().collect();
+            for slot in chars.iter_mut().skip(char_start).take(width) {
+                *slot = ' ';
+            }
+            chars.into_iter().collect()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    if ends_with_newline {
+        lines.push('\n');
+    }
+    lines
+}
+
+/// A background "Workspace" session is created beside the e2e session and
+/// sometimes is still absent when the snapshot lands. Drop that one unfocused
+/// row, renumber the e2e session back to `01`, and shift only the left rail
+/// so the pane text stays on the same lines.
+fn drop_optional_unfocused_workspace_session(snapshot: &str) -> String {
+    let ends_with_newline = snapshot.ends_with('\n');
+    let mut lines: Vec<String> = snapshot.lines().map(str::to_owned).collect();
+    let Some(row) = lines.iter().position(|line| {
+        line.split_once('│')
+            .is_some_and(|(left, _)| left.trim() == "01 ○ Workspace")
+    }) else {
+        return snapshot.to_owned();
+    };
+    let Some(next_left) = lines
+        .get(row + 1)
+        .and_then(|line| line.split_once('│').map(|(left, _)| left.to_owned()))
+    else {
+        return snapshot.to_owned();
+    };
+    if !next_left.trim_start().starts_with("02 ") {
+        return snapshot.to_owned();
+    }
+    if row > 0 {
+        lines[row - 1] = lines[row - 1].replacen("SESSIONS 2", "SESSIONS 1", 1);
+    }
+    let mut index = row;
+    while index + 1 < lines.len() {
+        let Some((dest_left, dest_right)) = lines[index].split_once('│') else {
+            break;
+        };
+        let dest_width = dest_left.chars().count();
+        let dest_right = dest_right.to_owned();
+        let Some((src_left, _)) = lines[index + 1].split_once('│') else {
+            break;
+        };
+        let mut src_left = src_left.to_owned();
+        if index == row {
+            let indent = src_left
+                .chars()
+                .take_while(|character| *character == ' ')
+                .count();
+            let trimmed: String = src_left.chars().skip(indent).collect();
+            if let Some(rest) = trimmed.strip_prefix("02 ") {
+                src_left = format!("{}01 {rest}", " ".repeat(indent));
+            }
+        }
+        lines[index] = format!("{}│{dest_right}", fit_to_columns(&src_left, dest_width));
+        index += 1;
+    }
+    if let Some((left, right)) = lines[index].split_once('│') {
+        let width = left.chars().count();
+        lines[index] = format!("{}│{right}", " ".repeat(width));
+    }
+    let mut joined = lines.join("\n");
+    if ends_with_newline {
+        joined.push('\n');
+    }
+    joined
+}
+
+fn fit_to_columns(text: &str, width: usize) -> String {
+    let mut chars: Vec<char> = text.chars().collect();
+    if chars.len() < width {
+        chars.extend(std::iter::repeat_n(' ', width - chars.len()));
+    }
+    chars.into_iter().collect()
+}
+
+/// The active compact-bar chip is `◉ <label>  x`. A default tab keeps the
+/// literal `Tab #1` until the command label replaces it. Restore that literal
+/// and move the difference into the widest interior gap, which is the bar's
+/// flex padding.
+fn stabilize_compact_default_tab_label(snapshot: &str) -> String {
+    let chip = Regex::new(r"◉ (.+?)  x").unwrap();
+    let ends_with_newline = snapshot.ends_with('\n');
+    let mut lines = snapshot
+        .lines()
+        .map(|line| {
+            let Some(name) = chip
+                .captures(line)
+                .and_then(|captures| captures.get(1))
+                .map(|name| name.as_str())
+            else {
+                return line.to_owned();
+            };
+            if name == "Tab #1" {
+                return line.to_owned();
+            }
+            let canonical = "Tab #1";
+            let replaced = line.replacen(&format!("◉ {name}  x"), &format!("◉ {canonical}  x"), 1);
+            resize_widest_interior_gap(
+                &replaced,
+                canonical.chars().count() as isize - name.chars().count() as isize,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    if ends_with_newline {
+        lines.push('\n');
+    }
+    lines
+}
+
+/// `delta` is how many columns the line grew. Give them back to, or take them
+/// from, the widest run of spaces that is not the leading indent.
+fn resize_widest_interior_gap(line: &str, delta: isize) -> String {
+    if delta == 0 {
+        return line.to_owned();
+    }
+    let chars: Vec<char> = line.chars().collect();
+    let mut best: Option<(usize, usize)> = None;
+    let mut index = 0;
+    while index < chars.len() {
+        if chars[index] != ' ' {
+            index += 1;
+            continue;
+        }
+        let start = index;
+        while index < chars.len() && chars[index] == ' ' {
+            index += 1;
+        }
+        if start == 0 {
+            continue;
+        }
+        let len = index - start;
+        if best.is_none_or(|(_, best_len)| len > best_len) {
+            best = Some((start, len));
+        }
+    }
+    let Some((start, len)) = best else {
+        return line.to_owned();
+    };
+    let mut resized = chars;
+    if delta > 0 {
+        let remove = (delta as usize).min(len.saturating_sub(1));
+        resized.drain(start..start + remove);
+    } else {
+        resized.splice(start..start, std::iter::repeat_n(' ', (-delta) as usize));
+    }
+    resized.into_iter().collect()
+}
+
 fn account_for_races_in_snapshot(snapshot: String) -> String {
     // these replacements need to be done because plugins set themselves as "unselectable" at runtime
     // when they are loaded - since they are loaded asynchronously, sometimes the "BASE" indication
@@ -126,6 +453,14 @@ fn account_for_races_in_snapshot(snapshot: String) -> String {
     // its output. Keep the status line while ignoring whether the input echo
     // survived that repaint.
     let echo_status_command_replace = Regex::new(r"(?m)^(│\$) echo \$\?(\s+│)$").unwrap();
+    // The status bar prints the running generation as `<semver>+g<sha8>[.dirty]`.
+    // The sha is this build's commit, so a committed snapshot cannot pin it.
+    let generation_replace = Regex::new(r"(\d+\.\d+\.\d+)\+g[0-9a-f]{8}(?:\.dirty)?").unwrap();
+    // A missing product launcher falls through to a login shell whose prompt
+    // includes the machine hostname. CI containers get a fresh id each run.
+    // Swallow the prompt and the cursor that sits on it, then pad after that
+    // cursor so both the cursor column and the pane border stay put.
+    let shell_prompt_replace = Regex::new(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}:~\$(?: █)?").unwrap();
     let snapshot = base_replace.replace_all(&snapshot, "\n").to_string();
     let snapshot = base_replace_tmux_mode_1
         .replace_all(&snapshot, "\n")
@@ -133,6 +468,9 @@ fn account_for_races_in_snapshot(snapshot: String) -> String {
     let snapshot = base_replace_tmux_mode_2
         .replace_all(&snapshot, "\n")
         .to_string();
+    // The tab bar paints the same BASE swap-layout ribbon on the right of the
+    // session line once plugins finish loading. Blank that ribbon in place.
+    let snapshot = blank_inline_base_ribbon(&snapshot);
     let snapshot = live_replace.replace_all(&snapshot, "").to_string();
     let snapshot = rail_live_replace
         .replace_all(&snapshot, "Live …")
@@ -152,8 +490,69 @@ fn account_for_races_in_snapshot(snapshot: String) -> String {
         // Preserve the terminal-grid width while erasing the optional echo.
         .replace_all(&snapshot, "$1        $2")
         .to_string();
+    let snapshot = generation_replace
+        .replace_all(&snapshot, "$1+gSHA")
+        .to_string();
+    let snapshot = shell_prompt_replace
+        .replace_all(&snapshot, |captures: &regex::Captures| {
+            let matched = captures
+                .get(0)
+                .map(|capture| capture.as_str())
+                .unwrap_or("");
+            let label = if matched.ends_with('█') {
+                "host:~$ █"
+            } else {
+                "host:~$"
+            };
+            if matched.len() > label.len() {
+                format!("{label}{}", " ".repeat(matched.len() - label.len()))
+            } else {
+                label.to_owned()
+            }
+        })
+        .to_string();
 
-    eol_arrow_replace.replace_all(&snapshot, "\n").to_string()
+    let snapshot = eol_arrow_replace.replace_all(&snapshot, "\n").to_string();
+    // The e2e session list sometimes includes an unfocused Workspace row that
+    // was created in the background and sometimes does not. Drop that row
+    // before the chip rewrite so both paints compare equal.
+    let snapshot = drop_optional_unfocused_workspace_session(&snapshot);
+    // The compact bar replaces a default "Tab #N" chip with the shell command
+    // label once vc-tab-title's debounce fires. The snapshot can land on
+    // either paint. Put the default chip back and keep the flex gap so the
+    // right-hand cluster stays in the same columns.
+    let snapshot = stabilize_compact_default_tab_label(&snapshot);
+    // The status row races through three paints: chip only, chip plus the
+    // long shortcut labels, then the same row with the wider published
+    // generation (which compresses those labels). The pane contents are the
+    // assertion; the row itself is not stable across runners.
+    let ends_with_newline = snapshot.ends_with('\n');
+    let mut snapshot = snapshot
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim();
+            let chip =
+                trimmed.contains("GEN ?") || trimmed.contains("GEN !") || trimmed.contains("+gSHA");
+            let mode_row = (line.contains("LOCK") || line.contains("PANE") || line.contains("TAB"))
+                && line.contains(" !");
+            // Locked mode sometimes paints only the session identity, with
+            // no shortcut row and no generation chip yet.
+            let bare_identity = trimmed.ends_with(" !")
+                && !trimmed.contains('│')
+                && !trimmed.contains('┌')
+                && !trimmed.contains('└');
+            if chip || mode_row || bare_identity {
+                "STATUS"
+            } else {
+                line
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    if ends_with_newline {
+        snapshot.push('\n');
+    }
+    snapshot
 }
 
 fn normalize_mirrored_guide_content(snapshot: String) -> String {
@@ -202,6 +601,110 @@ fn snapshot_normalization_ignores_dynamic_server_live_counts() {
         let snapshot = format!("status ... LIVE {count:>3}↗\n");
         assert_eq!(account_for_races_in_snapshot(snapshot), "status ... \n");
     }
+}
+
+#[test]
+fn snapshot_normalization_ignores_late_compact_shell_label() {
+    let pending = "        𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍.    ⎮  ▷ N   ◉ Tab #1  x  + Tab                Voc · ✍ Composer  · Panels  1  · ❯_ Quick cmd  ☾  Aa\n";
+    // "Shell" is one column shorter, so the bar's flex gap grows by one.
+    let landed = "        𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍.    ⎮  ▷ N   ◉ Shell  x  + Tab                 Voc · ✍ Composer  · Panels  1  · ❯_ Quick cmd  ☾  Aa\n";
+    let pending = account_for_races_in_snapshot(pending.to_owned());
+    let landed = account_for_races_in_snapshot(landed.to_owned());
+    assert_eq!(pending, landed);
+    assert!(pending.contains("◉ Tab #1  x"));
+    assert!(!landed.contains("Shell"));
+    // A spinner frame is one extra column on the same label.
+    let spinning = "        𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍.    ⎮  ▷ N   ◉ ⠦ Shell  x  + Tab               Voc · ✍ Composer  · Panels  1  · ❯_ Quick cmd  ☾  Aa\n";
+    assert_eq!(account_for_races_in_snapshot(spinning.to_owned()), pending);
+}
+
+#[test]
+fn snapshot_normalization_ignores_late_base_swap_ribbon() {
+    let pending = " 𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍. (e2e-test)   ◉ Tab #1  ×                                                                                  \n";
+    let ribbon = " BASE ";
+    let pending_chars: Vec<char> = pending.trim_end_matches('\n').chars().collect();
+    let width = ribbon.chars().count();
+    let landed = format!(
+        "{}{ribbon}\n",
+        pending_chars[..pending_chars.len() - width]
+            .iter()
+            .collect::<String>()
+    );
+    let pending = account_for_races_in_snapshot(pending.to_owned());
+    let landed = account_for_races_in_snapshot(landed);
+    assert_eq!(pending, landed);
+    assert!(!pending.contains("BASE"));
+    assert_eq!(
+        account_for_races_in_snapshot("Alt <[]>  BASE \n".to_owned()),
+        "\n"
+    );
+}
+
+#[test]
+fn snapshot_normalization_ignores_launchpad_chip_and_workspace_row() {
+    let launchpad = "        𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍.    ⎮  ▷ N   ◉ Launchpad  x +2 + Tab         Voc · ✍ Composer  · Panels  1  · ❯_ Quick cmd  ☾  Aa \n";
+    let canonical = "        𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍.    ⎮  ▷ N   ◉ Tab #1  x +2 + Tab            Voc · ✍ Composer  · Panels  1  · ❯_ Quick cmd  ☾  Aa \n";
+    assert_eq!(
+        account_for_races_in_snapshot(launchpad.to_owned()),
+        account_for_races_in_snapshot(canonical.to_owned())
+    );
+    assert!(account_for_races_in_snapshot(launchpad.to_owned()).contains("◉ Tab #1  x"));
+    // A cursor block has one space before `x` and is a real tab name.
+    let cursor_block = "◉ Launchpad [ ] x";
+    assert!(account_for_races_in_snapshot(cursor_block.to_owned()).contains(cursor_block));
+
+    let with_workspace = "\
+SESSIONS 2 · E2e Test│pane
+01 ○ Workspace      │
+02 ◉ E2e Test       │BODY
+   ◉ Launchpad      │
++ Open              │
+                    │
+";
+    let without_workspace = "\
+SESSIONS 1 · E2e Test│pane
+01 ◉ E2e Test       │
+   ◉ Launchpad      │BODY
++ Open              │
+                    │
+                    │
+";
+    assert_eq!(
+        account_for_races_in_snapshot(with_workspace.to_owned()),
+        account_for_races_in_snapshot(without_workspace.to_owned())
+    );
+}
+
+#[test]
+fn snapshot_normalization_keeps_generation_semver_and_drops_build_sha() {
+    let snapshot = "footer watcher_client_functionality !  4.5.1+ga60d44e6 ?\n";
+    assert_eq!(
+        account_for_races_in_snapshot(snapshot.to_owned()),
+        "STATUS\n"
+    );
+    let dirty = "4.5.1+ga60d44e6.dirty";
+    assert_eq!(account_for_races_in_snapshot(dirty.to_owned()), "STATUS");
+    let local_prompt = "zellij-e2e:~$ █    │";
+    let ci_prompt = "abcdefghijkl:~$ █  │";
+    let normalized_local = account_for_races_in_snapshot(local_prompt.to_owned());
+    let normalized_ci = account_for_races_in_snapshot(ci_prompt.to_owned());
+    assert_eq!(normalized_local, normalized_ci);
+    assert_eq!(
+        normalized_local.chars().count(),
+        local_prompt.chars().count()
+    );
+    assert!(normalized_local.starts_with("host:~$ █"));
+    assert_eq!(
+        account_for_races_in_snapshot("ab:~$ █".to_owned()),
+        "host:~$ █"
+    );
+    assert_eq!(
+        account_for_races_in_snapshot(
+            "                                                                       e2e-test !\n"
+                .to_owned()
+        ),
+        "STATUS\n"
+    );
 }
 
 #[test]
@@ -2745,6 +3248,112 @@ pub fn pin_floating_panes() {
     };
     let last_snapshot = account_for_races_in_snapshot(last_snapshot);
     assert_snapshot!(last_snapshot);
+}
+
+/// Panels layer: a Global (pinned) panel conversation survives switching away
+/// from its tab and back. The guest-visit leg (A → B → A through a Handled
+/// projection) cannot be driven from this single-session harness; the unit test
+/// `global_panel_survives_guest_switch_project_panel_hides` and the W1-5
+/// walk-around on the `tests/workspace_host.rs` scratch host cover it.
+#[test]
+#[ignore]
+pub fn global_panel_survives_visit() {
+    let fake_win_size = Size {
+        cols: 120,
+        rows: 24,
+    };
+    let mut test_attempts = 3;
+    let last_snapshot = loop {
+        RemoteRunner::kill_running_sessions(fake_win_size);
+        let mut runner = RemoteRunner::new(fake_win_size)
+            .add_step(Step {
+                name: "Open a panel on the floating layer",
+                instruction: |mut remote_terminal: RemoteTerminal| -> bool {
+                    let mut step_is_complete = false;
+                    if remote_terminal.status_bar_appears()
+                        && remote_terminal.cursor_position_is(3, 2)
+                    {
+                        remote_terminal.send_key(&PANE_MODE);
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                        remote_terminal.send_key(&TOGGLE_FLOATING_PANES);
+                        step_is_complete = true;
+                    }
+                    step_is_complete
+                },
+            })
+            .add_step(Step {
+                name: "Start the panel conversation",
+                instruction: |mut remote_terminal: RemoteTerminal| -> bool {
+                    let mut step_is_complete = false;
+                    if remote_terminal.snapshot_contains("PIN ○") {
+                        remote_terminal.send_key("echo panel-alive".as_bytes());
+                        remote_terminal.send_key(&ENTER);
+                        step_is_complete = true;
+                    }
+                    step_is_complete
+                },
+            })
+            .add_step(Step {
+                name: "Make the panel Global (pin it)",
+                instruction: |mut remote_terminal: RemoteTerminal| -> bool {
+                    let mut step_is_complete = false;
+                    if remote_terminal.snapshot_contains("panel-alive") {
+                        remote_terminal.send_key(&sgr_mouse_report(Position::new(8, 87), 0));
+                        step_is_complete = true;
+                    }
+                    step_is_complete
+                },
+            })
+            .add_step(Step {
+                name: "Switch away to a new tab",
+                instruction: |mut remote_terminal: RemoteTerminal| -> bool {
+                    let mut step_is_complete = false;
+                    if remote_terminal.snapshot_contains("PIN ◉") {
+                        remote_terminal.send_key(&TAB_MODE);
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                        remote_terminal.send_key(&NEW_TAB_IN_TAB_MODE);
+                        step_is_complete = true;
+                    }
+                    step_is_complete
+                },
+            })
+            .add_step(Step {
+                name: "Come back to the panel's tab",
+                instruction: |mut remote_terminal: RemoteTerminal| -> bool {
+                    let mut step_is_complete = false;
+                    if !remote_terminal.snapshot_contains("panel-alive") {
+                        remote_terminal.send_key(&TAB_MODE);
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                        remote_terminal.send_key(&SWITCH_PREV_TAB_IN_TAB_MODE);
+                        step_is_complete = true;
+                    }
+                    step_is_complete
+                },
+            });
+
+        runner.run_all_steps();
+        let last_snapshot = runner.take_snapshot_after(Step {
+            name: "Wait for the Global panel conversation to be back",
+            instruction: |remote_terminal: RemoteTerminal| -> bool {
+                remote_terminal.snapshot_contains("panel-alive")
+                    && remote_terminal.snapshot_contains("PIN ◉")
+            },
+        });
+        if runner.test_timed_out && test_attempts > 0 {
+            test_attempts -= 1;
+            continue;
+        } else {
+            break last_snapshot;
+        }
+    };
+    assert!(
+        last_snapshot.contains("panel-alive"),
+        "the Global panel conversation must survive the switch:\n{last_snapshot}"
+    );
+    assert!(
+        last_snapshot.contains("PIN ◉"),
+        "the panel must still be Global (pinned):\n{last_snapshot}"
+    );
 }
 
 #[test]
