@@ -6,31 +6,20 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-pub fn create_http_client(
-    ca_cert: Option<&Path>,
-    insecure: bool,
-) -> Result<HttpClient, isahc::Error> {
+/// Builds the HTTP client for remote attach. Server certificates are always validated:
+/// against the system trust store, or against `ca_cert` (a PEM bundle, which may be the
+/// server's own self-signed certificate) when one is given. There is no way to turn
+/// validation off.
+pub fn create_http_client(ca_cert: Option<&Path>) -> Result<HttpClient, isahc::Error> {
     let mut builder = HttpClient::builder()
         .redirect_policy(RedirectPolicy::Follow)
         .timeout(connection_timeout());
 
-    let tls_config = if insecure {
-        eprintln!(
-            "WARNING: TLS certificate validation is disabled. This connection is NOT secure."
-        );
-        Some(
-            TlsConfig::builder()
-                .danger_accept_invalid_certs(true)
-                .danger_accept_invalid_hosts(true)
-                .build(),
-        )
-    } else {
-        ca_cert.map(|ca_path| {
-            TlsConfig::builder()
-                .trust_store(TrustStore::from_file(ca_path))
-                .build()
-        })
-    };
+    let tls_config = ca_cert.map(|ca_path| {
+        TlsConfig::builder()
+            .trust_store(TrustStore::from_file(ca_path))
+            .build()
+    });
 
     if let Some(tls_config) = tls_config {
         builder = builder.tls_config(tls_config);
@@ -45,9 +34,9 @@ pub struct HttpClientWithCookies {
 }
 
 impl HttpClientWithCookies {
-    pub fn new(ca_cert: Option<&Path>, insecure: bool) -> Result<Self, isahc::Error> {
+    pub fn new(ca_cert: Option<&Path>) -> Result<Self, isahc::Error> {
         Ok(Self {
-            client: create_http_client(ca_cert, insecure)?,
+            client: create_http_client(ca_cert)?,
             cookies: Arc::new(Mutex::new(HashMap::new())),
         })
     }

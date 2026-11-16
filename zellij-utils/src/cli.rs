@@ -1396,8 +1396,10 @@ pub enum Sessions {
         #[clap(long, value_name = "FILE", value_parser)]
         ca_cert: Option<PathBuf>,
 
-        /// Skip TLS certificate validation (DANGEROUS — development only)
-        #[clap(long, value_parser)]
+        // Kept (hidden) so the removed flag fails with an explanation pointing at --ca-cert
+        // instead of as an unknown argument. See zellij_client::INSECURE_REMOTE_ATTACH_REMOVED.
+        /// No longer supported: TLS certificate validation cannot be disabled. Use --ca-cert
+        #[clap(long, value_parser, hide = true)]
         insecure: bool,
     },
 

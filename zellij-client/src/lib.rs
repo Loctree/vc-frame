@@ -653,6 +653,12 @@ pub async fn run_remote_client_terminal_loop(
     Ok(None)
 }
 
+/// `--insecure` used to skip TLS certificate validation for remote attach, which let anyone on
+/// the path impersonate the server and capture the auth token. A self-signed server is
+/// supported by trusting its certificate explicitly with `--ca-cert` instead.
+#[cfg(feature = "web_server_capability")]
+pub const INSECURE_REMOTE_ATTACH_REMOVED: &str = "--insecure is no longer supported: TLS certificate validation cannot be disabled. For a server with a self-signed certificate, pass that certificate (PEM) with --ca-cert <PATH>.";
+
 #[cfg(feature = "web_server_capability")]
 pub struct StartRemoteClientOptions<'a> {
     pub os_input: Box<dyn ClientOsApi>,
@@ -661,6 +667,8 @@ pub struct StartRemoteClientOptions<'a> {
     pub remember: bool,
     pub forget: bool,
     pub ca_cert: Option<std::path::PathBuf>,
+    /// Legacy `--insecure` request. Certificate validation can no longer be disabled, so a
+    /// `true` here is refused before any connection is made.
     pub insecure: bool,
     pub async_worker_tasks: Option<usize>,
 }
@@ -670,6 +678,12 @@ pub fn start_remote_client(
     opts: StartRemoteClientOptions<'_>,
 ) -> Result<Option<ConnectToSession>, RemoteClientError> {
     info!("Starting vc-frame client!");
+
+    if opts.insecure {
+        return Err(RemoteClientError::Other(
+            INSECURE_REMOTE_ATTACH_REMOVED.into(),
+        ));
+    }
 
     // See start_client(): an interactive (remote) client needs a real TTY for
     // raw mode; fail fast instead of panicking in set_raw_mode() without one.
@@ -691,7 +705,6 @@ pub fn start_remote_client(
             remember: opts.remember,
             forget: opts.forget,
             ca_cert: opts.ca_cert.as_deref(),
-            insecure: opts.insecure,
         })?;
 
     let reconnect_to_session = None;

@@ -434,7 +434,6 @@ mod tests {
                 remember,
                 forget,
                 ca_cert: None,
-                insecure: true, // for tests
             })
         })
         .await
@@ -814,54 +813,32 @@ mod tests {
         // sends the session cookie). TLS for this client is irrelevant since
         // it never makes HTTP requests in these tests.
         let http_client =
-            crate::remote_attach::http_client::HttpClientWithCookies::new(None, true).unwrap();
+            crate::remote_attach::http_client::HttpClientWithCookies::new(None).unwrap();
         http_client.set_cookie("session_token".to_string(), session_token);
 
         (web_client_id, http_client)
     }
 
-    #[tokio::test]
-    #[serial]
-    async fn test_tls_insecure_mode() {
-        use crate::remote_attach::websockets;
+    #[test]
+    fn test_insecure_flag_is_refused_before_connecting() {
+        // Port 1 is never listened on: the request must be refused before any connection.
+        let result = crate::start_remote_client(crate::StartRemoteClientOptions {
+            os_input: Box::new(MockClientOsApi),
+            remote_session_url: "https://127.0.0.1:1/test-session",
+            token: Some("token".to_string()),
+            remember: false,
+            forget: false,
+            ca_cert: None,
+            insecure: true,
+            async_worker_tasks: None,
+        });
 
-        let certs = tls_mock_server::generate_test_certs();
-        let server_state = MockRemoteServerState::new();
-
-        let (port, handle, server_task) =
-            tls_mock_server::start_tls_mock_server(server_state.clone(), &certs).await;
-
-        let (web_client_id, http_client) = seed_mock_session(&server_state);
-        let server_base_url = format!("https://127.0.0.1:{}", port);
-
-        let result = tokio::time::timeout(
-            Duration::from_secs(10),
-            websockets::establish_websocket_connections(
-                &web_client_id,
-                &http_client,
-                &server_base_url,
-                "test-session",
-                None,
-                true, // insecure — exercises NoVerifier
-            ),
-        )
-        .await
-        .expect("Test timed out");
-
-        assert!(
-            result.is_ok(),
-            "TLS insecure mode should connect successfully: {:?}",
-            result.err()
-        );
-
-        let connections = result.unwrap();
-        assert!(!connections.web_client_id.is_empty());
-
-        let endpoints = server_state.get_endpoints_called();
-        assert!(endpoints.contains(&"/ws/terminal".to_string()));
-        assert!(endpoints.contains(&"/ws/control".to_string()));
-
-        tls_mock_server::shutdown_server(handle, server_task).await;
+        match result.err().expect("--insecure must be refused") {
+            RemoteClientError::Other(e) => {
+                assert_eq!(e.to_string(), crate::INSECURE_REMOTE_ATTACH_REMOVED)
+            },
+            other => panic!("unexpected error: {}", other),
+        }
     }
 
     #[tokio::test]
@@ -885,8 +862,7 @@ mod tests {
                 &http_client,
                 &server_base_url,
                 "test-session",
-                Some(certs.ca_cert_path.as_path()),
-                false, // not insecure — verify against CA cert
+                Some(certs.ca_cert_path.as_path()), // verify against the CA cert
             ),
         )
         .await
@@ -929,8 +905,7 @@ mod tests {
                 &http_client,
                 &server_base_url,
                 "test-session",
-                None,  // no CA cert
-                false, // not insecure — should reject self-signed
+                None, // no CA cert: the self-signed server must be rejected
             ),
         )
         .await

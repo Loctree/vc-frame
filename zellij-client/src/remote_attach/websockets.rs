@@ -57,64 +57,16 @@ impl AsyncWrite for MaybeTls {
     }
 }
 
-// -- NoVerifier (for --insecure mode) --------------------------------------
-
-#[derive(Debug)]
-struct NoVerifier;
-
-impl rustls::client::danger::ServerCertVerifier for NoVerifier {
-    fn verify_server_cert(
-        &self,
-        _end_entity: &rustls_pki_types::CertificateDer<'_>,
-        _intermediates: &[rustls_pki_types::CertificateDer<'_>],
-        _server_name: &rustls_pki_types::ServerName<'_>,
-        _ocsp_response: &[u8],
-        _now: rustls_pki_types::UnixTime,
-    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
-        Ok(rustls::client::danger::ServerCertVerified::assertion())
-    }
-
-    fn verify_tls12_signature(
-        &self,
-        _message: &[u8],
-        _cert: &rustls_pki_types::CertificateDer<'_>,
-        _dss: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
-    }
-
-    fn verify_tls13_signature(
-        &self,
-        _message: &[u8],
-        _cert: &rustls_pki_types::CertificateDer<'_>,
-        _dss: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
-    }
-
-    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        rustls::crypto::aws_lc_rs::default_provider()
-            .signature_verification_algorithms
-            .supported_schemes()
-    }
-}
-
 // -- TLS config builder ----------------------------------------------------
 
+/// Server certificates are always validated, against `ca_cert` when given (which may be the
+/// server's own self-signed certificate) or against the platform's native roots otherwise.
 fn build_tls_config(
     ca_cert: Option<&Path>,
-    insecure: bool,
 ) -> Result<Arc<rustls::ClientConfig>, Box<dyn std::error::Error>> {
     let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
 
-    if insecure {
-        let config = rustls::ClientConfig::builder_with_provider(provider)
-            .with_safe_default_protocol_versions()?
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(NoVerifier))
-            .with_no_client_auth();
-        Ok(Arc::new(config))
-    } else if let Some(ca_path) = ca_cert {
+    if let Some(ca_path) = ca_cert {
         let ca_pem = std::fs::read(ca_path)?;
         let certs: Vec<rustls_pki_types::CertificateDer<'static>> =
             rustls_pki_types::CertificateDer::pem_slice_iter(&ca_pem).collect::<Result<_, _>>()?;
@@ -188,7 +140,6 @@ pub async fn establish_websocket_connections(
     server_base_url: &str,
     session_name: &str,
     ca_cert: Option<&Path>,
-    insecure: bool,
 ) -> Result<WebSocketConnections, Box<dyn std::error::Error>> {
     let parsed_url = url::Url::parse(server_base_url)?;
     let host = parsed_url
@@ -259,7 +210,7 @@ pub async fn establish_websocket_connections(
 
     // Build TLS config (only for wss://)
     let tls_config = if is_tls {
-        Some(build_tls_config(ca_cert, insecure)?)
+        Some(build_tls_config(ca_cert)?)
     } else {
         None
     };

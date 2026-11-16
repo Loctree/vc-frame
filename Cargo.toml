@@ -95,7 +95,7 @@ daemonize = { version = "0.5", default-features = false }
 dialoguer = { version = "0.10.4", default-features = false, features = ["password", "completion"] }
 humantime = { version = "2.1.0", default-features = false }
 interprocess = { version = "2.2", default-features = false, features = ["tokio"] }
-isahc = { version = "2.0.1", default-features = false, features = ["http2", "text-decoding", "native-tls", "tls-insecure"] }
+isahc = { version = "2.0.1", default-features = false, features = ["http2", "text-decoding", "native-tls"] }
 kdl = { version = "4.5.0", default-features = false, features = ["span"] }
 lazy_static = { version = "1.4.0", default-features = false }
 libc = { version = "0.2", default-features = false, features = ["std"] }
