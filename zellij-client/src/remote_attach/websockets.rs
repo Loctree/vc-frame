@@ -81,8 +81,13 @@ fn build_tls_config(
         Ok(Arc::new(config))
     } else {
         let native_certs = rustls_native_certs::load_native_certs();
-        for err in &native_certs.errors {
-            log::warn!("Error loading native certificate: {}", err);
+        // Report only how many native certificates failed to load. The errors carry
+        // certificate store contents and paths, which do not belong in the log file.
+        if !native_certs.errors.is_empty() {
+            log::warn!(
+                "{} native certificate(s) could not be loaded; continuing with the rest",
+                native_certs.errors.len()
+            );
         }
         let mut root_store = rustls::RootCertStore::empty();
         root_store.add_parsable_certificates(native_certs.certs);

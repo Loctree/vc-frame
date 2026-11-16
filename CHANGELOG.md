@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 - fix(security): the web client's `session_token` cookie is always `Secure` (also on the plain-HTTP loopback listener, which current browsers treat as a trustworthy origin), and an invalid session is expired with a single `Secure` tombstone. Safari/WKWebView only accept `Secure` cookies over plain-HTTP loopback from Safari 27 on macOS 26; older Safari needs the web server to run with a certificate
 - fix(security): remote attach always validates the server's TLS certificate. `--insecure` is refused with a pointer to `--ca-cert <PEM>`, which trusts a self-signed server explicitly; isahc is built without `tls-insecure`
+- fix(security): remote attach no longer writes native certificate loading errors to the log, only how many certificates failed to load
 
 ## [4.5.1] - 2026-11-03
 
