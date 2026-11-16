@@ -50,23 +50,22 @@ pub async fn serve_html(State(state): State<AppState>, request: Request) -> Html
     )
 }
 
-pub async fn login_handler(
-    State(state): State<AppState>,
-    Json(login_request): Json<LoginRequest>,
-) -> impl IntoResponse {
+/// The session cookie is always `Secure`. An HTTPS listener requires it, and a plain-HTTP
+/// listener can only ever be bound to a loopback address (`should_use_https` rejects every
+/// other bind without a certificate). Current browser engines treat loopback as a potentially
+/// trustworthy origin that stores and returns `Secure` cookies over plain HTTP (Chromium 89+,
+/// Firefox 75+, Safari/WKWebView 27 on macOS 26+).
+pub async fn login_handler(Json(login_request): Json<LoginRequest>) -> impl IntoResponse {
     match create_session_token(
         &login_request.auth_token,
         login_request.remember_me.unwrap_or(false),
     ) {
         Ok(session_token) => {
-            // `is_https` can only be false for a loopback listener. `should_use_https`
-            // rejects every non-loopback bind without a certificate before the server starts.
-            let is_https = state.is_https;
             let cookie = if login_request.remember_me.unwrap_or(false) {
                 // Persistent cookie for remember_me
                 Cookie::build(("session_token", session_token))
                     .http_only(true)
-                    .secure(is_https)
+                    .secure(true)
                     .same_site(SameSite::Strict)
                     .path("/")
                     .max_age(time::Duration::weeks(4))
@@ -75,7 +74,7 @@ pub async fn login_handler(
                 // Session cookie - NO max_age means it expires when browser closes/refreshes
                 Cookie::build(("session_token", session_token))
                     .http_only(true)
-                    .secure(is_https)
+                    .secure(true)
                     .same_site(SameSite::Strict)
                     .path("/")
                     .build()

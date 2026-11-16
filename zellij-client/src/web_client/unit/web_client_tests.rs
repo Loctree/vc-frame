@@ -378,6 +378,7 @@ mod tests {
             "Should have received session cookie"
         );
         let cookie_value = set_cookie_header.unwrap().to_str().unwrap();
+        assert_session_cookie_is_hardened(cookie_value);
         let session_token = cookie_value
             .split(';')
             .next()
@@ -819,8 +820,42 @@ mod tests {
         .expect("Session request failed");
 
         assert_eq!(response.status(), 401);
+        let clear_cookies: Vec<&str> = response
+            .headers()
+            .get_all("set-cookie")
+            .iter()
+            .map(|value| value.to_str().unwrap())
+            .collect();
+        assert_eq!(
+            clear_cookies.len(),
+            1,
+            "invalid session should be expired with exactly one cookie: {:?}",
+            clear_cookies
+        );
+        assert_session_cookie_is_hardened(clear_cookies[0]);
+        assert!(
+            clear_cookies[0].contains("Max-Age=0"),
+            "invalid session cookie should be expired: {}",
+            clear_cookies[0]
+        );
 
         server_handle.abort();
+    }
+
+    fn assert_session_cookie_is_hardened(set_cookie: &str) {
+        assert!(
+            set_cookie.starts_with("session_token="),
+            "unexpected cookie: {}",
+            set_cookie
+        );
+        for attribute in ["HttpOnly", "Secure", "SameSite=Strict", "Path=/"] {
+            assert!(
+                set_cookie.split(';').any(|part| part.trim() == attribute),
+                "session cookie is missing `{}`: {}",
+                attribute,
+                set_cookie
+            );
+        }
     }
 
     #[tokio::test]

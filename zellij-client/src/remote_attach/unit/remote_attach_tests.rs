@@ -17,7 +17,7 @@ mod mock_server {
         response::Response,
         routing::{get, post},
     };
-    use axum_extra::extract::cookie::{Cookie, CookieJar};
+    use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
     use serde::Deserialize;
     use serde_json::json;
     use tokio::net::TcpListener;
@@ -86,11 +86,13 @@ mod mock_server {
             .unwrap()
             .insert(session_token.clone(), web_client_id);
 
-        // This mock server intentionally uses loopback HTTP. A Secure cookie would not be
-        // returned by the test client's cookie jar and would invalidate the mock contract.
+        // Mirror the real web server: the session cookie is always `Secure`, even on the
+        // loopback HTTP listener. The remote-attach cookie jar must keep working with it.
         let cookie = Cookie::build(("session_token", session_token))
             .path("/")
             .http_only(true)
+            .secure(true)
+            .same_site(SameSite::Strict)
             .build();
         let jar = jar.add(cookie);
 

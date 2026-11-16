@@ -46,30 +46,20 @@ pub async fn auth_middleware(request: Request, next: Next) -> Result<Response, S
                 .body(Body::empty())
                 .unwrap();
 
-            // Clear both variants: loopback HTTP legitimately creates the non-secure
-            // cookie, and a later HTTPS request cannot remove it with a Secure tombstone.
-            let clear_cookies = [
-                Cookie::build(("session_token", ""))
-                    .http_only(true)
-                    .secure(false)
-                    .same_site(SameSite::Strict)
-                    .path("/")
-                    .max_age(time::Duration::seconds(0))
-                    .build(),
-                Cookie::build(("session_token", ""))
-                    .http_only(true)
-                    .secure(true)
-                    .same_site(SameSite::Strict)
-                    .path("/")
-                    .max_age(time::Duration::seconds(0))
-                    .build(),
-            ];
+            // The session cookie is always issued as `Secure` (see `login_handler`), so a
+            // single `Secure` tombstone expires it. A cookie is keyed by name, domain and path,
+            // so this also expires a non-`Secure` `session_token` left by an older build.
+            let clear_cookie = Cookie::build(("session_token", ""))
+                .http_only(true)
+                .secure(true)
+                .same_site(SameSite::Strict)
+                .path("/")
+                .max_age(time::Duration::seconds(0))
+                .build();
 
-            for cookie in clear_cookies {
-                response
-                    .headers_mut()
-                    .append(SET_COOKIE, cookie.to_string().parse().unwrap());
-            }
+            response
+                .headers_mut()
+                .append(SET_COOKIE, clear_cookie.to_string().parse().unwrap());
 
             Ok(response)
         },
