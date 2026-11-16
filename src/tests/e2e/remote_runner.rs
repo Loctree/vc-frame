@@ -18,7 +18,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 const ZELLIJ_EXECUTABLE_LOCATION: &str = "/usr/src/zellij/zellij";
-const SET_ENV_VARIABLES: &str = "EDITOR=/usr/bin/vi";
+const SET_ENV_VARIABLES: &str = "EDITOR=/usr/bin/vi PATH=/usr/src/zellij/fixtures/bin:$PATH";
 const E2E_RUNTIME_ROOT: &str = "/tmp/vc-frame-e2e";
 const E2E_SOCKET_DIR: &str = "/tmp/vc-frame-e2e/sockets";
 const E2E_CACHE_DIR: &str = "/tmp/vc-frame-e2e/cache";
@@ -35,6 +35,33 @@ const CONNECTION_USERNAME: &str = "test";
 const SSH_KEY_ENV: &str = "ZELLIJ_E2E_SSH_KEY";
 const SESSION_NAME: &str = "e2e-test";
 const RETRIES: usize = 5;
+
+/// The status bar paints `GEN ?` / `GEN !` until `vc.generation.v1` arrives.
+/// The published label is `<semver>+g<sha8>[.dirty]`, which is wider, so a
+/// frame taken on the placeholder does not match a frame taken after publish.
+fn generation_chip_settled(snapshot: &str) -> bool {
+    !snapshot.contains("GEN ?") && !snapshot.contains("GEN !")
+}
+
+/// The status bar first paints only its right-hand chip, then fills the
+/// shortcut row. Those two frames are the same width race the snapshots
+/// were failing on, so a frame is settled only after the chip is published
+/// and the shortcut row is present.
+fn status_row_settled(snapshot: &str) -> bool {
+    if !generation_chip_settled(snapshot) {
+        return false;
+    }
+    !snapshot.lines().any(status_line_is_chip_only)
+}
+
+fn status_line_is_chip_only(line: &str) -> bool {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    let has_chip = trimmed.contains("GEN ?") || trimmed.contains("GEN !") || trimmed.contains("+g");
+    has_chip && !line.contains("LOCK") && !line.contains("PANE") && !line.contains("TAB")
+}
 
 /// Public-key only. There is deliberately no password fallback: a static
 /// `test`/`test` credential on this service container is exactly what was
@@ -86,6 +113,16 @@ fn setup_remote_environment(channel: &mut ssh2::Channel, win_size: Size) {
         .request_pty("xterm", None, Some((columns, rows, 0, 0)))
         .unwrap();
     channel.shell().unwrap();
+    // The initial request carries a 0×0 pixel size. Some SSH servers keep a
+    // default that is a couple of columns off that request, which shifts every
+    // pane border in the snapshot. Repeat the size as a window-change and
+    // apply it in the shell before vc-frame starts.
+    channel
+        .request_pty_size(columns, rows, Some(columns), Some(rows))
+        .unwrap();
+    channel
+        .write_all(format!("stty cols {columns} rows {rows} >/dev/null 2>&1 || true\n").as_bytes())
+        .unwrap();
     channel.write_all(b"export PS1=\"$ \"\n").unwrap();
     channel
         .write_all(
@@ -1088,13 +1125,19 @@ impl RemoteRunner {
     }
     pub fn take_snapshot_after_with_retries(&mut self, step: Step, retries: usize) -> String {
         let mut retries_left = retries;
+        // The generation chip is published on the 1Hz metadata loop, and the
+        // first frames often keep the shorter "GEN ?" placeholder. Accepting
+        // that placeholder reflows the shortcut row, so wait long enough for
+        // the published `<semver>+g<sha8>` label before giving up.
+        let mut generation_grace = 200;
+        let mut ready_snapshot: Option<String> = None;
         let instruction = step.instruction;
         loop {
             println!(
                 "taking snapshot: {}, retries left: {}",
                 step.name, retries_left
             );
-            if retries_left == 0 {
+            if retries_left == 0 && ready_snapshot.is_none() {
                 self.test_timed_out = true;
                 return self.last_snapshot.lock().unwrap().clone();
             }
@@ -1110,13 +1153,27 @@ impl RemoteRunner {
                 last_snapshot: Arc::new(Mutex::new(snapshot.clone())),
                 channel: self.channel.clone(),
             };
-            if instruction(remote_terminal) {
+            let ready = instruction(remote_terminal);
+            if ready {
+                ready_snapshot = Some(snapshot.clone());
+            }
+            if status_row_settled(&snapshot) && (ready || ready_snapshot.is_some()) {
                 return snapshot;
-            } else {
-                retries_left -= 1;
+            }
+            if ready_snapshot.is_some() {
+                // Publishing the chip reflows the bar and can move the cursor,
+                // so the original predicate may flicker false. That is not a
+                // failed attempt; keep the caller's retries and wait for the
+                // settled frame.
+                if generation_grace == 0 {
+                    return ready_snapshot.unwrap_or(snapshot);
+                }
+                generation_grace -= 1;
                 std::thread::sleep(std::time::Duration::from_millis(100));
                 continue;
             }
+            retries_left -= 1;
+            std::thread::sleep(std::time::Duration::from_millis(100));
         }
     }
     pub fn run_all_steps(&mut self) {
@@ -1162,6 +1219,24 @@ mod cleanup_contract_tests {
         assert!(!command.contains("killall"));
         assert!(!command.contains("-KILL"));
         assert!(!command.contains("rm -rf /tmp/*"));
+    }
+
+    #[test]
+    fn generation_placeholder_is_not_a_settled_snapshot() {
+        assert!(!generation_chip_settled(
+            "session !  GEN ?\n4.5.1+ga60d44e6 is not here"
+        ));
+        assert!(!generation_chip_settled("split GEN !"));
+        assert!(generation_chip_settled(
+            "session !  4.5.1+ga60d44e6 ?\nhost:~$"
+        ));
+        assert!(generation_chip_settled("no status bar yet"));
+        assert!(!status_row_settled(
+            "pane\n                                                                 e2e-test !  4.5.1+ga60d44e6 ?"
+        ));
+        assert!(status_row_settled(
+            "pane\n ⌃g  LOCK  ⌃p  PANE  e2e-test !  4.5.1+ga60d44e6 ?"
+        ));
     }
 
     #[test]

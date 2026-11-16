@@ -23,6 +23,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import shlex
 import signal
 import shutil
@@ -255,12 +256,22 @@ def validate_build_info(
 COMMAND_TIMEOUT_SECS = 30
 # Nested CLI budgets in src/run_triage_cli.rs for a full triage-run transfer:
 #   CLI_COMMAND_TIMEOUT = 10s (inventory / capture / close chain)
-#   NEW_TAB_COMMAND_TIMEOUT = 30s
+#   NEW_TAB_COMMAND_TIMEOUT = 45s
 #   VIEWER_CREATION_RECONCILIATION_TIMEOUT = 30s
 # Matching the outer harness to 30s races those inner budgets and kills
 # transfers mid-viewer-creation on slower Linux runners (ops-linux
 # TimeoutExpired on triage-run for the exit-2 case). Only triage() uses this.
 TRIAGE_COMMAND_TIMEOUT_SECS = 120
+# Marker tabs go through the same new-tab action. The CLI keeps that call
+# alive for NEW_TAB_COMMAND_TIMEOUT (45s) and then the harness polls for the
+# pane. A 30s harness kill fires before the CLI returns, so a slow
+# acknowledgement never reaches the poll. Stay above the CLI budget.
+MARKER_NEW_TAB_TIMEOUT_SECS = 60
+# A successful acknowledgement only needs a short materialize poll. An
+# ambiguous one means the route stopped waiting while the tab may still
+# appear, so keep watching before treating the action as lost.
+MARKER_MATERIALIZE_SECS = 15
+AMBIGUOUS_MARKER_MATERIALIZE_SECS = 45
 
 
 def command(
@@ -599,9 +610,9 @@ def server_argument_paths(command_line: str) -> list[pathlib.Path]:
 
 def operator_guard_volatile_paths() -> set[pathlib.Path]:
     """Operator-owned heartbeat files whose identity, not bytes, is guarded."""
-    temporary_value = os.environ.get("TMPDIR", "/tmp")
+    temporary_value = "/tmp" if sys.platform == "darwin" else os.environ.get("TMPDIR", "/tmp")
     runtime_root = (pathlib.Path(temporary_value) / f"vc-frame-{os.getuid()}").resolve()
-    volatile = {runtime_root / "vc-frame-log" / "zellij.log"}
+    volatile = set((runtime_root / "vc-frame-log").glob("*/*.log*"))
 
     home_value = os.environ.get("HOME")
     if not home_value:
@@ -662,6 +673,244 @@ def socket_path_budget(
         "longest": longest,
         "remaining_bytes": remaining,
     }
+
+
+LOG_COLLECT_MAX_FILES = 24
+LOG_COLLECT_TAIL_BYTES = 256 * 1024
+
+
+def _open_directory_nofollow(parent_fd: int, name: str) -> int:
+    return os.open(
+        name,
+        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+        dir_fd=parent_fd,
+    )
+
+
+def collect_private_server_logs(
+    namespace_root: pathlib.Path,
+    destination: pathlib.Path,
+    *,
+    label: str,
+) -> dict[str, object]:
+    """Copy bounded tails of this harness namespace's own server/client logs.
+
+    Only the exact private log root derived from this namespace's TMPDIR is
+    read (``<ns>/tmp/vc-frame-<uid>/vc-frame-log/<scope>/*``). Traversal holds
+    directory descriptors opened with O_NOFOLLOW from the namespace root, so a
+    component swapped for a symlink after listing is refused rather than
+    followed, and files are opened relative to their held scope descriptor with
+    O_NOFOLLOW|O_NONBLOCK and admitted only if fstat says regular. macOS pins
+    the log root to the host-global ``/tmp/vc-frame-<uid>``, which this harness
+    must not read, so nothing is collected there. Evidence only: callers must
+    never let this change a trial's verdict.
+    """
+    receipt: dict[str, object] = {
+        "label": label,
+        "namespace_root": str(namespace_root),
+        "files": [],
+        "skipped": [],
+    }
+    files = cast(list[dict[str, object]], receipt["files"])
+    skipped = cast(list[dict[str, object]], receipt["skipped"])
+    if sys.platform == "darwin":
+        receipt["status"] = "not_collected_host_global_log_root"
+        return receipt
+    held: list[int] = []
+    try:
+        try:
+            current = os.open(
+                namespace_root.resolve(),
+                os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
+            )
+        except OSError as error:
+            receipt["status"] = f"namespace_unreadable:{error.errno}"
+            return receipt
+        held.append(current)
+        for part in ("tmp", f"vc-frame-{os.getuid()}", "vc-frame-log"):
+            try:
+                current = _open_directory_nofollow(current, part)
+            except FileNotFoundError:
+                receipt["status"] = "no_log_root"
+                return receipt
+            except OSError as error:
+                receipt["status"] = f"log_root_not_a_real_directory:{part}:{error.errno}"
+                return receipt
+            held.append(current)
+        log_root_fd = current
+        for scope_name in sorted(os.listdir(log_root_fd)):
+            try:
+                scope_fd = _open_directory_nofollow(log_root_fd, scope_name)
+            except OSError:
+                skipped.append({"path": scope_name, "reason": "scope_not_a_real_directory"})
+                continue
+            try:
+                for name in sorted(os.listdir(scope_fd)):
+                    label_path = f"{scope_name}/{name}"
+                    if len(files) >= LOG_COLLECT_MAX_FILES:
+                        skipped.append({"path": label_path, "reason": "file_cap"})
+                        continue
+                    try:
+                        descriptor = os.open(
+                            name,
+                            os.O_RDONLY
+                            | os.O_NONBLOCK
+                            | os.O_NOFOLLOW
+                            | os.O_CLOEXEC,
+                            dir_fd=scope_fd,
+                        )
+                    except OSError:
+                        skipped.append({"path": label_path, "reason": "not_a_regular_file"})
+                        continue
+                    try:
+                        opened = os.fstat(descriptor)
+                        if not stat.S_ISREG(opened.st_mode):
+                            skipped.append(
+                                {"path": label_path, "reason": "not_a_regular_file"}
+                            )
+                            continue
+                        offset = max(opened.st_size - LOG_COLLECT_TAIL_BYTES, 0)
+                        os.lseek(descriptor, offset, os.SEEK_SET)
+                        contents = os.read(descriptor, LOG_COLLECT_TAIL_BYTES)
+                    finally:
+                        os.close(descriptor)
+                    safe = re.sub(r"[^A-Za-z0-9._-]", "_", f"{scope_name}--{name}")
+                    target = destination / label / f"{len(files):02d}-{safe}.tail"
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(contents)
+                    files.append(
+                        {
+                            "scope": scope_name,
+                            "name": name,
+                            "source_bytes": opened.st_size,
+                            "copied_bytes": len(contents),
+                            "truncated": offset > 0,
+                            "sha256": sha256_bytes(contents),
+                            "mtime_ns": opened.st_mtime_ns,
+                            "copy": str(target),
+                        }
+                    )
+            finally:
+                os.close(scope_fd)
+        receipt["status"] = "collected"
+        return receipt
+    finally:
+        for descriptor in held:
+            os.close(descriptor)
+
+
+def _json_or_none(raw: str) -> object:
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+
+def untimesliced_bucket_startup_probe(
+    binary: pathlib.Path,
+    evidence_root: pathlib.Path,
+    *,
+    session: str = "Needs attention",
+    ready_budget: float = 90.0,
+    layout: str = "vibecrafted",
+) -> dict[str, object]:
+    """Time a bucket session's startup in its own fresh namespace, never paused.
+
+    Run only after the failed trial's namespaces are gone, so it cannot prewarm
+    them. Same layout/arguments and the same two-part readiness the production
+    ``wait_for_session_ready`` applies (tab inventory is a JSON array AND the
+    pane inventory is a non-empty JSON array); the tab-only moment is recorded
+    separately and is not readiness. Pure evidence: errors are recorded, never
+    raised, and the namespace is always cleaned with the exact-target guard.
+    """
+    result: dict[str, object] = {
+        "session": session,
+        "layout": layout,
+        "ready_budget_seconds": ready_budget,
+    }
+    runtime = pathlib.Path(
+        tempfile.mkdtemp(prefix="vcf-e2e-probe-", dir=SHORT_RUNTIME_PARENT)
+    ).resolve()
+    result["runtime_root"] = str(runtime)
+    env = isolated_env(runtime / "p", runtime / "control-plane")
+    try:
+        started = time.monotonic()
+        created = command(
+            binary,
+            env,
+            "--layout",
+            layout,
+            "attach",
+            "--create-background",
+            session,
+            expect_success=None,
+            timeout=60,
+        )
+        result["create_returncode"] = created.returncode
+        result["create_elapsed_seconds"] = round(time.monotonic() - started, 3)
+        result["create_stderr_tail"] = created.stderr[-600:]
+        attempts = 0
+        last = ""
+        tabs_ready_after: float | None = None
+        ready_after: float | None = None
+        while time.monotonic() - started < ready_budget:
+            attempts += 1
+            tabs = command(
+                binary,
+                env,
+                "-s",
+                session,
+                "action",
+                "list-tabs",
+                "--json",
+                expect_success=None,
+                timeout=15,
+            )
+            last = tabs.stderr.strip()[-300:]
+            if tabs.returncode == 0 and isinstance(
+                _json_or_none(tabs.stdout), list
+            ):
+                if tabs_ready_after is None:
+                    tabs_ready_after = round(time.monotonic() - started, 3)
+                # production wait_for_session_ready also needs a NON-empty pane
+                # inventory from the same query it issues
+                panes = command(
+                    binary,
+                    env,
+                    "-s",
+                    session,
+                    "action",
+                    "list-panes",
+                    "--json",
+                    "--all",
+                    "--tab",
+                    "--state",
+                    expect_success=None,
+                    timeout=15,
+                )
+                last = panes.stderr.strip()[-300:] or last
+                parsed = _json_or_none(panes.stdout) if panes.returncode == 0 else None
+                if isinstance(parsed, list) and parsed:
+                    ready_after = round(time.monotonic() - started, 3)
+                    break
+            time.sleep(0.025)
+        result["readiness_attempts"] = attempts
+        # tab-response-only timing is distinct from production readiness
+        result["list_tabs_first_array_after_seconds"] = tabs_ready_after
+        result["bucket_ready_after_seconds"] = ready_after
+        result["last_readiness_stderr"] = last
+        result["logs"] = collect_private_server_logs(
+            runtime / "p", evidence_root / "probe-server-logs", label="probe"
+        )
+    except BaseException as error:  # evidence only
+        result["probe_error"] = f"{type(error).__name__}: {error}"
+    finally:
+        try:
+            result["cleanup"] = cleanup_namespace(binary, env, {session})
+            result["runtime_root_removal"] = remove_runtime_root(runtime)
+        except BaseException as error:
+            result["cleanup_error"] = f"{type(error).__name__}: {error}"
+    return result
 
 
 def remove_runtime_root(runtime_root: pathlib.Path) -> dict[str, object]:
@@ -1102,7 +1351,10 @@ def runtime_state_snapshot(
 ) -> dict[str, object]:
     session_state: dict[str, object] = {}
     for session in sorted(sessions):
-        query = query_session(binary, env, session)
+        # list-tabs and list-sessions can disagree for a moment while a
+        # session is registering. One mismatched read is not runtime truth;
+        # the stable query retries that window, then still fails closed.
+        query = query_session_until_stable(binary, env, session)
         if query.state == "absent":
             session_state[session] = {
                 "state": "absent",
@@ -1260,7 +1512,16 @@ def create_session(binary: pathlib.Path, env: dict[str, str], session: str) -> N
         query_session(binary, env, session).state == "absent",
         f"refusing to adopt pre-existing session {session!r}",
     )
-    command(binary, env, "attach", "--create-background", session)
+    # Bare create mounts the embedded host. This fixture is an ordinary session.
+    command(
+        binary,
+        env,
+        "--layout",
+        "vibecrafted",
+        "attach",
+        "--create-background",
+        session,
+    )
     # A detached/background session can truthfully expose an empty bootstrap
     # pane inventory. Session readiness is therefore proven through list-tabs;
     # the first marker tab below separately proves terminal-pane usability.
@@ -1297,7 +1558,53 @@ def create_marker_tab_with_markers(
         for tab in wait_for_tabs(binary, env, session)
         if tab.get("name") == name and isinstance(tab.get("tab_id"), int)
     }
-    new_tab_result = command(
+    layout = marker_layout_for_markers(markers)
+    new_tab_result = _open_marker_tab(binary, env, session, name, layout)
+    found = _poll_marker_tab(
+        binary,
+        env,
+        session,
+        name,
+        markers,
+        existing_tab_ids,
+        _marker_materialize_secs(new_tab_result),
+    )
+    if found is None and _ambiguous_new_tab(new_tab_result) and not _new_named_tab_ids(
+        binary, env, session, name, existing_tab_ids
+    ):
+        # Nothing was created. One more new-tab is safe; a second one after a
+        # late first tab would make the name ambiguous, so that case is not
+        # retried.
+        print(
+            f"marker tab {session}/{name} did not appear after an ambiguous NewTab; retrying once",
+            file=sys.stderr,
+        )
+        new_tab_result = _open_marker_tab(binary, env, session, name, layout)
+        found = _poll_marker_tab(
+            binary,
+            env,
+            session,
+            name,
+            markers,
+            existing_tab_ids,
+            _marker_materialize_secs(new_tab_result),
+        )
+    if found is not None:
+        return found
+    raise AssertionError(
+        f"tab {session}/{name} did not materialize {len(markers)} new terminal pane(s); "
+        f"new-tab exit={new_tab_result.returncode}, stderr={new_tab_result.stderr!r}"
+    )
+
+
+def _open_marker_tab(
+    binary: pathlib.Path,
+    env: dict[str, str],
+    session: str,
+    name: str,
+    layout: str,
+) -> subprocess.CompletedProcess[str]:
+    return command(
         binary,
         env,
         "-s",
@@ -1307,10 +1614,46 @@ def create_marker_tab_with_markers(
         "--name",
         name,
         "--layout-string",
-        marker_layout_for_markers(markers),
+        layout,
         expect_success=None,
+        timeout=MARKER_NEW_TAB_TIMEOUT_SECS,
     )
-    deadline = time.monotonic() + 15
+
+
+def _ambiguous_new_tab(result: subprocess.CompletedProcess[str]) -> bool:
+    return result.returncode != 0 and "did not acknowledge completion" in (result.stderr or "")
+
+
+def _marker_materialize_secs(result: subprocess.CompletedProcess[str]) -> float:
+    if _ambiguous_new_tab(result):
+        return AMBIGUOUS_MARKER_MATERIALIZE_SECS
+    return MARKER_MATERIALIZE_SECS
+
+
+def _new_named_tab_ids(
+    binary: pathlib.Path,
+    env: dict[str, str],
+    session: str,
+    name: str,
+    existing_tab_ids: set[int],
+) -> set[int]:
+    return {
+        int(tab["tab_id"])
+        for tab in wait_for_tabs(binary, env, session)
+        if tab.get("name") == name and isinstance(tab.get("tab_id"), int)
+    } - existing_tab_ids
+
+
+def _poll_marker_tab(
+    binary: pathlib.Path,
+    env: dict[str, str],
+    session: str,
+    name: str,
+    markers: list[str],
+    existing_tab_ids: set[int],
+    window: float,
+) -> tuple[int, list[int]] | None:
+    deadline = time.monotonic() + window
     while time.monotonic() < deadline:
         try:
             tab_id = tab_identity(binary, env, session, name)
@@ -1320,10 +1663,7 @@ def create_marker_tab_with_markers(
         except AssertionError:
             pass
         time.sleep(0.1)
-    raise AssertionError(
-        f"tab {session}/{name} did not materialize {len(markers)} new terminal pane(s); "
-        f"new-tab exit={new_tab_result.returncode}, stderr={new_tab_result.stderr!r}"
-    )
+    return None
 
 
 def wait_for_marker(
@@ -1716,13 +2056,34 @@ def triage(
         pane_id=pane_id,
         transcript=transcript,
     )
-    return command(
-        binary,
-        env,
-        *args,
-        expect_success=expect_success,
-        timeout=TRIAGE_COMMAND_TIMEOUT_SECS,
-    )
+    # OpenBucketTab persists the viewer reservation before new-tab. When that
+    # acknowledgement expires, the capture is already durable and the origin
+    # tab is preserved, and a second triage-run adopts the pending viewer.
+    # One retry covers a bucket session that was still loading plugins.
+    attempts = 2 if expect_success else 1
+    for attempt in range(attempts):
+        try:
+            return command(
+                binary,
+                env,
+                *args,
+                expect_success=expect_success,
+                timeout=TRIAGE_COMMAND_TIMEOUT_SECS,
+            )
+        except AssertionError as error:
+            message = str(error)
+            retryable = (
+                attempt + 1 < attempts
+                and "did not acknowledge completion" in message
+                and "origin tab: preserved" in message
+                and "capture durable: true" in message
+            )
+            if not retryable:
+                raise
+            print(
+                "triage-run NewTab acknowledgement expired with a durable capture; retrying once",
+                file=sys.stderr,
+            )
 
 
 def write_runtime_transcript_manifest(
@@ -2937,6 +3298,7 @@ def interrupt_process_at_state(
             "VC_FRAME_SOCKET_DIR"
         )
         process.vc_frame_owned_binary = str(binary.resolve())  # type: ignore[attr-defined]
+        spawned_at = time.monotonic()
         try:
             wait_for_process_stop(process)
             for slices in range(1, max_slices + 1):
@@ -2969,8 +3331,12 @@ def interrupt_process_at_state(
                 )
             if observed is None:
                 returncode = process.wait(timeout=5)
+                stderr.flush()
+                tail = stderr_path.read_bytes()[-600:].decode("utf-8", "replace").strip()
                 raise AssertionError(
-                    f"{scenario} exited before its killpoint: exit={returncode}"
+                    f"{scenario} exited before its killpoint: exit={returncode} "
+                    f"after {time.monotonic() - spawned_at:.2f}s wall over {slices} "
+                    f"time slices of {slice_seconds}s; stderr tail: {tail!r}"
                 )
             returncode = process.wait(timeout=5)
         except BaseException as error:
@@ -3443,18 +3809,21 @@ def classify_socket_cleanup_entry(
         entry["kind"] = "directory"
         return entry
 
+    # Production layout (zellij-utils sessions.rs::socket_lease_path): the lock
+    # lives outside the versioned socket namespace, as
+    # <socket_root>/.vc-frame-socket-leases/contract_version_N/<name>.lock.
     parts = relative.parts
     contract_prefix = "contract_version_"
     contract_version = (
-        parts[0][len(contract_prefix) :]
-        if parts and parts[0].startswith(contract_prefix)
+        parts[1][len(contract_prefix) :]
+        if len(parts) == 3 and parts[1].startswith(contract_prefix)
         else ""
     )
     is_lease_shape = (
         len(parts) == 3
+        and parts[0] == ".vc-frame-socket-leases"
         and bool(contract_version)
         and contract_version.isdigit()
-        and parts[1] == ".vc-frame-socket-leases"
         and parts[2].endswith(".lock")
         and parts[2] != ".lock"
     )
@@ -3491,6 +3860,57 @@ def classify_socket_cleanup_entry(
 
     entry.update({"kind": "inert_lease_lock", "mode": "0600", "bytes": 0})
     return entry
+
+
+FIXTURE_LOG_SCOPE_PATTERN = re.compile(
+    r"^e[0-9a-f]{9,}-(origin|peer|headless|missing|miss|empty)$"
+)
+ALLOWED_HOST_LOG_FILES = re.compile(
+    r"^(vc-frame\.log(\.old\.\d+)?|pane-\d+\.log)$"
+)
+
+
+def cleanup_fixture_host_log_scopes(
+    owned_targets: set[str],
+    *,
+    log_root: pathlib.Path | None = None,
+) -> list[str]:
+    """Remove exact fixture-scoped server log dirs from macOS's host log root."""
+    if log_root is None:
+        if sys.platform != "darwin":
+            return []
+        log_root = pathlib.Path("/tmp") / f"vc-frame-{os.getuid()}" / "vc-frame-log"
+    try:
+        root_metadata = log_root.lstat()
+    except FileNotFoundError:
+        return []
+    if stat.S_ISLNK(root_metadata.st_mode) or not stat.S_ISDIR(root_metadata.st_mode):
+        return []
+    removed: list[str] = []
+    for target in sorted(owned_targets):
+        if not FIXTURE_LOG_SCOPE_PATTERN.match(target):
+            continue
+        scope_dir = log_root / target
+        try:
+            metadata = scope_dir.lstat()
+        except FileNotFoundError:
+            continue
+        require(
+            not stat.S_ISLNK(metadata.st_mode) and stat.S_ISDIR(metadata.st_mode),
+            f"refusing to remove non-directory fixture log scope: {scope_dir}",
+        )
+        for child in sorted(scope_dir.iterdir()):
+            child_meta = child.lstat()
+            require(
+                not stat.S_ISLNK(child_meta.st_mode)
+                and stat.S_ISREG(child_meta.st_mode)
+                and ALLOWED_HOST_LOG_FILES.match(child.name) is not None,
+                f"refusing to remove unexpected file in fixture log scope: {child}",
+            )
+            child.unlink()
+        scope_dir.rmdir()
+        removed.append(target)
+    return removed
 
 
 def cleanup_namespace(
@@ -3588,6 +4008,7 @@ def cleanup_namespace(
     )
     process_residue = wait_for_no_server_processes(socket_root, timeout=timeout)
     require(not process_residue, "isolated namespace retained server processes")
+    cleanup_fixture_host_log_scopes(owned_targets)
     socket_entries = (
         [
             classify_socket_cleanup_entry(socket_root, path)
@@ -4954,6 +5375,30 @@ def main() -> int:
     except BaseException as error:
         caught = error
     finally:
+        if mutation_started:
+            # Preserve timing evidence even if only the later cleanup fails.
+            # Collect before cleanup deletes logs, without changing the verdict
+            # or hiding the primary error.
+            for log_label, log_namespace in (
+                ("primary", primary_root),
+                ("restart", restart_root),
+            ):
+                try:
+                    recorder.append(
+                        "server_logs",
+                        collect_private_server_logs(
+                            log_namespace, root / "server-logs", label=log_label
+                        ),
+                    )
+                except BaseException as log_error:
+                    recorder.append(
+                        "server_logs",
+                        {
+                            "label": log_label,
+                            "status": "collection_failed",
+                            "error": f"{type(log_error).__name__}: {log_error}",
+                        },
+                    )
         interruption_receipt = interruption_cleanup_receipt(
             interruption_cleanup_proofs
         )
@@ -5011,6 +5456,15 @@ def main() -> int:
                 "runtime_root": str(runtime_root),
             }
         recorder.set("cleanup", cleanup_receipts)
+
+    if caught is not None and "exited before its killpoint" in str(caught):
+        # Causal comparison for a leader that died before the killpoint: the
+        # same bucket startup, unpaused, in a fresh namespace, after the failed
+        # trial's namespaces were cleaned. Evidence only.
+        recorder.set(
+            "comparative_bucket_startup",
+            untimesliced_bucket_startup_probe(binary, root),
+        )
 
     operator_guard_after = guarded_tree_snapshot(
         guarded_operator_paths,

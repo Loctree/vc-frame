@@ -2,7 +2,7 @@
 source: src/tests/e2e/cases.rs
 expression: last_snapshot
 ---
- 𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍. (e2e-test)   ◉ Tab #1    ○ Tab #2    ○ Tab #3    ○ Tab #4                          Alt <[]>  STAGGERED 
+ 𝚅𝚒𝚋𝚎𝚌𝚛𝚊𝚏𝚝𝚎𝚍. (e2e-test)   ◉ Tab #1  ×   ○ Tab #2  ×   ○ Tab #3  ×   ○ Tab #4  ×                 Alt <[]>  STAGGERED 
 ┌ Pane #1 ─────────────────────────────────────────────────┐┌ Pane #2 ─────────────────────────────────────────────────┐
 │$                                                         ││$                                                         │
 │                                                          ││                                                          │
@@ -24,5 +24,5 @@ expression: last_snapshot
 │                                                          ││                                                          │
 │                                                          ││                                                          │
 └──────────────────────────────────────────────────────────┘└──────────────────────────────────────────────────────────┘
- ⌃ +g LOCK p PANE t TAB n RESIZE h MOVE s SEARCH o SESSION                      ⌥ + <[]>  STAGGERED 
+STATUS
  (FLOATING PANES VISIBLE): Press Ctrl p, <w> to hide.

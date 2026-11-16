@@ -218,6 +218,50 @@ Config {
                     '+',
                 ),
                 key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
                     Alt,
                 },
             }: [
@@ -237,6 +281,80 @@ Config {
                 Resize {
                     resize: Decrease,
                     direction: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '.',
+                ),
+                key_modifiers: {
+                    Shift,
+                    Super,
+                },
+            }: [
+                KeybindPipe {
+                    name: Some(
+                        "vc_quick_cmd",
+                    ),
+                    payload: None,
+                    args: None,
+                    plugin: Some(
+                        "compact-bar",
+                    ),
+                    plugin_id: None,
+                    configuration: None,
+                    launch_new: false,
+                    skip_cache: false,
+                    floating: Some(
+                        false,
+                    ),
+                    in_place: None,
+                    cwd: None,
+                    pane_title: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
                 },
             ],
             KeyWithModifier {
@@ -396,35 +514,6 @@ Config {
             }: [
                 MoveFocus {
                     direction: Up,
-                },
-            ],
-            KeyWithModifier {
-                bare_key: Char(
-                    'k',
-                ),
-                key_modifiers: {
-                    Super,
-                },
-            }: [
-                KeybindPipe {
-                    name: Some(
-                        "vc_quick_cmd",
-                    ),
-                    payload: None,
-                    args: None,
-                    plugin: Some(
-                        "compact-bar",
-                    ),
-                    plugin_id: None,
-                    configuration: None,
-                    launch_new: false,
-                    skip_cache: false,
-                    floating: Some(
-                        false,
-                    ),
-                    in_place: None,
-                    cwd: None,
-                    pane_title: None,
                 },
             ],
             KeyWithModifier {
@@ -694,21 +783,10 @@ Config {
             ],
             KeyWithModifier {
                 bare_key: Char(
-                    'g',
+                    '.',
                 ),
                 key_modifiers: {
-                    Ctrl,
-                },
-            }: [
-                SwitchToMode {
-                    input_mode: Normal,
-                },
-            ],
-            KeyWithModifier {
-                bare_key: Char(
-                    'k',
-                ),
-                key_modifiers: {
+                    Shift,
                     Super,
                 },
             }: [
@@ -731,6 +809,18 @@ Config {
                     in_place: None,
                     cwd: None,
                     pane_title: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    'g',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                SwitchToMode {
+                    input_mode: Normal,
                 },
             ],
         },
@@ -1003,6 +1093,50 @@ Config {
                     '+',
                 ),
                 key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
                     Alt,
                 },
             }: [
@@ -1037,6 +1171,36 @@ Config {
             ],
             KeyWithModifier {
                 bare_key: Char(
+                    '.',
+                ),
+                key_modifiers: {
+                    Shift,
+                    Super,
+                },
+            }: [
+                KeybindPipe {
+                    name: Some(
+                        "vc_quick_cmd",
+                    ),
+                    payload: None,
+                    args: None,
+                    plugin: Some(
+                        "compact-bar",
+                    ),
+                    plugin_id: None,
+                    configuration: None,
+                    launch_new: false,
+                    skip_cache: false,
+                    floating: Some(
+                        false,
+                    ),
+                    in_place: None,
+                    cwd: None,
+                    pane_title: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
                     '=',
                 ),
                 key_modifiers: {},
@@ -1044,6 +1208,50 @@ Config {
                 Resize {
                     resize: Increase,
                     direction: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
                 },
             ],
             KeyWithModifier {
@@ -1294,35 +1502,6 @@ Config {
             }: [
                 MoveFocus {
                     direction: Up,
-                },
-            ],
-            KeyWithModifier {
-                bare_key: Char(
-                    'k',
-                ),
-                key_modifiers: {
-                    Super,
-                },
-            }: [
-                KeybindPipe {
-                    name: Some(
-                        "vc_quick_cmd",
-                    ),
-                    payload: None,
-                    args: None,
-                    plugin: Some(
-                        "compact-bar",
-                    ),
-                    plugin_id: None,
-                    configuration: None,
-                    launch_new: false,
-                    skip_cache: false,
-                    floating: Some(
-                        false,
-                    ),
-                    in_place: None,
-                    cwd: None,
-                    pane_title: None,
                 },
             ],
             KeyWithModifier {
@@ -1730,6 +1909,50 @@ Config {
                     '+',
                 ),
                 key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
                     Alt,
                 },
             }: [
@@ -1753,6 +1976,80 @@ Config {
             ],
             KeyWithModifier {
                 bare_key: Char(
+                    '.',
+                ),
+                key_modifiers: {
+                    Shift,
+                    Super,
+                },
+            }: [
+                KeybindPipe {
+                    name: Some(
+                        "vc_quick_cmd",
+                    ),
+                    payload: None,
+                    args: None,
+                    plugin: Some(
+                        "compact-bar",
+                    ),
+                    plugin_id: None,
+                    configuration: None,
+                    launch_new: false,
+                    skip_cache: false,
+                    floating: Some(
+                        false,
+                    ),
+                    in_place: None,
+                    cwd: None,
+                    pane_title: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
                     '=',
                 ),
                 key_modifiers: {
@@ -1766,6 +2063,40 @@ Config {
             ],
             KeyWithModifier {
                 bare_key: Char(
+                    'G',
+                ),
+                key_modifiers: {},
+            }: [
+                PanelsSetScope {
+                    scope: Global,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    'P',
+                ),
+                key_modifiers: {},
+            }: [
+                PanelsSetScope {
+                    scope: Project,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '[',
+                ),
+                key_modifiers: {},
+            }: [
+                PanelsPrevious,
+            ],
+            KeyWithModifier {
+                bare_key: Char(
                     '[',
                 ),
                 key_modifiers: {
@@ -1773,6 +2104,14 @@ Config {
                 },
             }: [
                 PreviousSwapLayout,
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    ']',
+                ),
+                key_modifiers: {},
+            }: [
+                PanelsNext,
             ],
             KeyWithModifier {
                 bare_key: Char(
@@ -1896,6 +2235,19 @@ Config {
                 bare_key: Char(
                     'g',
                 ),
+                key_modifiers: {},
+            }: [
+                PanelsSetScope {
+                    scope: Global,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    'g',
+                ),
                 key_modifiers: {
                     Ctrl,
                 },
@@ -2003,35 +2355,6 @@ Config {
             }: [
                 MoveFocus {
                     direction: Up,
-                },
-            ],
-            KeyWithModifier {
-                bare_key: Char(
-                    'k',
-                ),
-                key_modifiers: {
-                    Super,
-                },
-            }: [
-                KeybindPipe {
-                    name: Some(
-                        "vc_quick_cmd",
-                    ),
-                    payload: None,
-                    args: None,
-                    plugin: Some(
-                        "compact-bar",
-                    ),
-                    plugin_id: None,
-                    configuration: None,
-                    launch_new: false,
-                    skip_cache: false,
-                    floating: Some(
-                        false,
-                    ),
-                    in_place: None,
-                    cwd: None,
-                    pane_title: None,
                 },
             ],
             KeyWithModifier {
@@ -2261,6 +2584,20 @@ Config {
                 SwitchToMode {
                     input_mode: Normal,
                 },
+            ],
+            KeyWithModifier {
+                bare_key: Tab,
+                key_modifiers: {},
+            }: [
+                PanelsNext,
+            ],
+            KeyWithModifier {
+                bare_key: Tab,
+                key_modifiers: {
+                    Shift,
+                },
+            }: [
+                PanelsPrevious,
             ],
             KeyWithModifier {
                 bare_key: Esc,
@@ -2559,6 +2896,50 @@ Config {
                     '+',
                 ),
                 key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
                     Alt,
                 },
             }: [
@@ -2578,6 +2959,36 @@ Config {
                 Resize {
                     resize: Decrease,
                     direction: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '.',
+                ),
+                key_modifiers: {
+                    Shift,
+                    Super,
+                },
+            }: [
+                KeybindPipe {
+                    name: Some(
+                        "vc_quick_cmd",
+                    ),
+                    payload: None,
+                    args: None,
+                    plugin: Some(
+                        "compact-bar",
+                    ),
+                    plugin_id: None,
+                    configuration: None,
+                    launch_new: false,
+                    skip_cache: false,
+                    floating: Some(
+                        false,
+                    ),
+                    in_place: None,
+                    cwd: None,
+                    pane_title: None,
                 },
             ],
             KeyWithModifier {
@@ -2692,6 +3103,50 @@ Config {
             }: [
                 GoToTab {
                     index: 9,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
                 },
                 SwitchToMode {
                     input_mode: Normal,
@@ -2953,35 +3408,6 @@ Config {
             }: [
                 MoveFocus {
                     direction: Up,
-                },
-            ],
-            KeyWithModifier {
-                bare_key: Char(
-                    'k',
-                ),
-                key_modifiers: {
-                    Super,
-                },
-            }: [
-                KeybindPipe {
-                    name: Some(
-                        "vc_quick_cmd",
-                    ),
-                    payload: None,
-                    args: None,
-                    plugin: Some(
-                        "compact-bar",
-                    ),
-                    plugin_id: None,
-                    configuration: None,
-                    launch_new: false,
-                    skip_cache: false,
-                    floating: Some(
-                        false,
-                    ),
-                    in_place: None,
-                    cwd: None,
-                    pane_title: None,
                 },
             ],
             KeyWithModifier {
@@ -3453,6 +3879,50 @@ Config {
                     '+',
                 ),
                 key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
                     Alt,
                 },
             }: [
@@ -3472,6 +3942,80 @@ Config {
                 Resize {
                     resize: Decrease,
                     direction: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '.',
+                ),
+                key_modifiers: {
+                    Shift,
+                    Super,
+                },
+            }: [
+                KeybindPipe {
+                    name: Some(
+                        "vc_quick_cmd",
+                    ),
+                    payload: None,
+                    args: None,
+                    plugin: Some(
+                        "compact-bar",
+                    ),
+                    plugin_id: None,
+                    configuration: None,
+                    launch_new: false,
+                    skip_cache: false,
+                    floating: Some(
+                        false,
+                    ),
+                    in_place: None,
+                    cwd: None,
+                    pane_title: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
                 },
             ],
             KeyWithModifier {
@@ -3697,35 +4241,6 @@ Config {
             }: [
                 MoveFocus {
                     direction: Up,
-                },
-            ],
-            KeyWithModifier {
-                bare_key: Char(
-                    'k',
-                ),
-                key_modifiers: {
-                    Super,
-                },
-            }: [
-                KeybindPipe {
-                    name: Some(
-                        "vc_quick_cmd",
-                    ),
-                    payload: None,
-                    args: None,
-                    plugin: Some(
-                        "compact-bar",
-                    ),
-                    plugin_id: None,
-                    configuration: None,
-                    launch_new: false,
-                    skip_cache: false,
-                    floating: Some(
-                        false,
-                    ),
-                    in_place: None,
-                    cwd: None,
-                    pane_title: None,
                 },
             ],
             KeyWithModifier {
@@ -4152,6 +4667,50 @@ Config {
                     '+',
                 ),
                 key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
                     Alt,
                 },
             }: [
@@ -4171,6 +4730,80 @@ Config {
                 Resize {
                     resize: Decrease,
                     direction: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '.',
+                ),
+                key_modifiers: {
+                    Shift,
+                    Super,
+                },
+            }: [
+                KeybindPipe {
+                    name: Some(
+                        "vc_quick_cmd",
+                    ),
+                    payload: None,
+                    args: None,
+                    plugin: Some(
+                        "compact-bar",
+                    ),
+                    plugin_id: None,
+                    configuration: None,
+                    launch_new: false,
+                    skip_cache: false,
+                    floating: Some(
+                        false,
+                    ),
+                    in_place: None,
+                    cwd: None,
+                    pane_title: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
                 },
             ],
             KeyWithModifier {
@@ -4342,35 +4975,6 @@ Config {
             }: [
                 MoveFocus {
                     direction: Up,
-                },
-            ],
-            KeyWithModifier {
-                bare_key: Char(
-                    'k',
-                ),
-                key_modifiers: {
-                    Super,
-                },
-            }: [
-                KeybindPipe {
-                    name: Some(
-                        "vc_quick_cmd",
-                    ),
-                    payload: None,
-                    args: None,
-                    plugin: Some(
-                        "compact-bar",
-                    ),
-                    plugin_id: None,
-                    configuration: None,
-                    launch_new: false,
-                    skip_cache: false,
-                    floating: Some(
-                        false,
-                    ),
-                    in_place: None,
-                    cwd: None,
-                    pane_title: None,
                 },
             ],
             KeyWithModifier {
@@ -4769,6 +5373,50 @@ Config {
                     '+',
                 ),
                 key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
                     Alt,
                 },
             }: [
@@ -4788,6 +5436,80 @@ Config {
                 Resize {
                     resize: Decrease,
                     direction: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '.',
+                ),
+                key_modifiers: {
+                    Shift,
+                    Super,
+                },
+            }: [
+                KeybindPipe {
+                    name: Some(
+                        "vc_quick_cmd",
+                    ),
+                    payload: None,
+                    args: None,
+                    plugin: Some(
+                        "compact-bar",
+                    ),
+                    plugin_id: None,
+                    configuration: None,
+                    launch_new: false,
+                    skip_cache: false,
+                    floating: Some(
+                        false,
+                    ),
+                    in_place: None,
+                    cwd: None,
+                    pane_title: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
                 },
             ],
             KeyWithModifier {
@@ -5010,35 +5732,6 @@ Config {
             }: [
                 MoveFocus {
                     direction: Up,
-                },
-            ],
-            KeyWithModifier {
-                bare_key: Char(
-                    'k',
-                ),
-                key_modifiers: {
-                    Super,
-                },
-            }: [
-                KeybindPipe {
-                    name: Some(
-                        "vc_quick_cmd",
-                    ),
-                    payload: None,
-                    args: None,
-                    plugin: Some(
-                        "compact-bar",
-                    ),
-                    plugin_id: None,
-                    configuration: None,
-                    launch_new: false,
-                    skip_cache: false,
-                    floating: Some(
-                        false,
-                    ),
-                    in_place: None,
-                    cwd: None,
-                    pane_title: None,
                 },
             ],
             KeyWithModifier {
@@ -5457,6 +6150,50 @@ Config {
                     '+',
                 ),
                 key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
                     Alt,
                 },
             }: [
@@ -5476,6 +6213,80 @@ Config {
                 Resize {
                     resize: Decrease,
                     direction: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '.',
+                ),
+                key_modifiers: {
+                    Shift,
+                    Super,
+                },
+            }: [
+                KeybindPipe {
+                    name: Some(
+                        "vc_quick_cmd",
+                    ),
+                    payload: None,
+                    args: None,
+                    plugin: Some(
+                        "compact-bar",
+                    ),
+                    plugin_id: None,
+                    configuration: None,
+                    launch_new: false,
+                    skip_cache: false,
+                    floating: Some(
+                        false,
+                    ),
+                    in_place: None,
+                    cwd: None,
+                    pane_title: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
                 },
             ],
             KeyWithModifier {
@@ -5647,35 +6458,6 @@ Config {
             }: [
                 MoveFocus {
                     direction: Up,
-                },
-            ],
-            KeyWithModifier {
-                bare_key: Char(
-                    'k',
-                ),
-                key_modifiers: {
-                    Super,
-                },
-            }: [
-                KeybindPipe {
-                    name: Some(
-                        "vc_quick_cmd",
-                    ),
-                    payload: None,
-                    args: None,
-                    plugin: Some(
-                        "compact-bar",
-                    ),
-                    plugin_id: None,
-                    configuration: None,
-                    launch_new: false,
-                    skip_cache: false,
-                    floating: Some(
-                        false,
-                    ),
-                    in_place: None,
-                    cwd: None,
-                    pane_title: None,
                 },
             ],
             KeyWithModifier {
@@ -6039,6 +6821,50 @@ Config {
                     '+',
                 ),
                 key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
                     Alt,
                 },
             }: [
@@ -6058,6 +6884,80 @@ Config {
                 Resize {
                     resize: Decrease,
                     direction: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '.',
+                ),
+                key_modifiers: {
+                    Shift,
+                    Super,
+                },
+            }: [
+                KeybindPipe {
+                    name: Some(
+                        "vc_quick_cmd",
+                    ),
+                    payload: None,
+                    args: None,
+                    plugin: Some(
+                        "compact-bar",
+                    ),
+                    plugin_id: None,
+                    configuration: None,
+                    launch_new: false,
+                    skip_cache: false,
+                    floating: Some(
+                        false,
+                    ),
+                    in_place: None,
+                    cwd: None,
+                    pane_title: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
                 },
             ],
             KeyWithModifier {
@@ -6229,35 +7129,6 @@ Config {
             }: [
                 MoveFocus {
                     direction: Up,
-                },
-            ],
-            KeyWithModifier {
-                bare_key: Char(
-                    'k',
-                ),
-                key_modifiers: {
-                    Super,
-                },
-            }: [
-                KeybindPipe {
-                    name: Some(
-                        "vc_quick_cmd",
-                    ),
-                    payload: None,
-                    args: None,
-                    plugin: Some(
-                        "compact-bar",
-                    ),
-                    plugin_id: None,
-                    configuration: None,
-                    launch_new: false,
-                    skip_cache: false,
-                    floating: Some(
-                        false,
-                    ),
-                    in_place: None,
-                    cwd: None,
-                    pane_title: None,
                 },
             ],
             KeyWithModifier {
@@ -6621,6 +7492,50 @@ Config {
                     '+',
                 ),
                 key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
                     Alt,
                 },
             }: [
@@ -6640,6 +7555,80 @@ Config {
                 Resize {
                     resize: Decrease,
                     direction: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '.',
+                ),
+                key_modifiers: {
+                    Shift,
+                    Super,
+                },
+            }: [
+                KeybindPipe {
+                    name: Some(
+                        "vc_quick_cmd",
+                    ),
+                    payload: None,
+                    args: None,
+                    plugin: Some(
+                        "compact-bar",
+                    ),
+                    plugin_id: None,
+                    configuration: None,
+                    launch_new: false,
+                    skip_cache: false,
+                    floating: Some(
+                        false,
+                    ),
+                    in_place: None,
+                    cwd: None,
+                    pane_title: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
                 },
             ],
             KeyWithModifier {
@@ -6869,35 +7858,6 @@ Config {
             }: [
                 MoveFocus {
                     direction: Up,
-                },
-            ],
-            KeyWithModifier {
-                bare_key: Char(
-                    'k',
-                ),
-                key_modifiers: {
-                    Super,
-                },
-            }: [
-                KeybindPipe {
-                    name: Some(
-                        "vc_quick_cmd",
-                    ),
-                    payload: None,
-                    args: None,
-                    plugin: Some(
-                        "compact-bar",
-                    ),
-                    plugin_id: None,
-                    configuration: None,
-                    launch_new: false,
-                    skip_cache: false,
-                    floating: Some(
-                        false,
-                    ),
-                    in_place: None,
-                    cwd: None,
-                    pane_title: None,
                 },
             ],
             KeyWithModifier {
@@ -7484,6 +8444,50 @@ Config {
                     '+',
                 ),
                 key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
                     Alt,
                 },
             }: [
@@ -7503,6 +8507,80 @@ Config {
                 Resize {
                     resize: Decrease,
                     direction: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '.',
+                ),
+                key_modifiers: {
+                    Shift,
+                    Super,
+                },
+            }: [
+                KeybindPipe {
+                    name: Some(
+                        "vc_quick_cmd",
+                    ),
+                    payload: None,
+                    args: None,
+                    plugin: Some(
+                        "compact-bar",
+                    ),
+                    plugin_id: None,
+                    configuration: None,
+                    launch_new: false,
+                    skip_cache: false,
+                    floating: Some(
+                        false,
+                    ),
+                    in_place: None,
+                    cwd: None,
+                    pane_title: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
                 },
             ],
             KeyWithModifier {
@@ -7698,35 +8776,6 @@ Config {
             }: [
                 MoveFocus {
                     direction: Up,
-                },
-            ],
-            KeyWithModifier {
-                bare_key: Char(
-                    'k',
-                ),
-                key_modifiers: {
-                    Super,
-                },
-            }: [
-                KeybindPipe {
-                    name: Some(
-                        "vc_quick_cmd",
-                    ),
-                    payload: None,
-                    args: None,
-                    plugin: Some(
-                        "compact-bar",
-                    ),
-                    plugin_id: None,
-                    configuration: None,
-                    launch_new: false,
-                    skip_cache: false,
-                    floating: Some(
-                        false,
-                    ),
-                    in_place: None,
-                    cwd: None,
-                    pane_title: None,
                 },
             ],
             KeyWithModifier {
@@ -8127,6 +9176,50 @@ Config {
                     '+',
                 ),
                 key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
                     Alt,
                 },
             }: [
@@ -8146,6 +9239,80 @@ Config {
                 Resize {
                     resize: Decrease,
                     direction: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '.',
+                ),
+                key_modifiers: {
+                    Shift,
+                    Super,
+                },
+            }: [
+                KeybindPipe {
+                    name: Some(
+                        "vc_quick_cmd",
+                    ),
+                    payload: None,
+                    args: None,
+                    plugin: Some(
+                        "compact-bar",
+                    ),
+                    plugin_id: None,
+                    configuration: None,
+                    launch_new: false,
+                    skip_cache: false,
+                    floating: Some(
+                        false,
+                    ),
+                    in_place: None,
+                    cwd: None,
+                    pane_title: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
                 },
             ],
             KeyWithModifier {
@@ -8305,35 +9472,6 @@ Config {
             }: [
                 MoveFocus {
                     direction: Up,
-                },
-            ],
-            KeyWithModifier {
-                bare_key: Char(
-                    'k',
-                ),
-                key_modifiers: {
-                    Super,
-                },
-            }: [
-                KeybindPipe {
-                    name: Some(
-                        "vc_quick_cmd",
-                    ),
-                    payload: None,
-                    args: None,
-                    plugin: Some(
-                        "compact-bar",
-                    ),
-                    plugin_id: None,
-                    configuration: None,
-                    launch_new: false,
-                    skip_cache: false,
-                    floating: Some(
-                        false,
-                    ),
-                    in_place: None,
-                    cwd: None,
-                    pane_title: None,
                 },
             ],
             KeyWithModifier {
@@ -8782,6 +9920,50 @@ Config {
                     '+',
                 ),
                 key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '+',
+                ),
+                key_modifiers: {
                     Alt,
                 },
             }: [
@@ -8811,6 +9993,80 @@ Config {
                 Resize {
                     resize: Decrease,
                     direction: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '.',
+                ),
+                key_modifiers: {
+                    Shift,
+                    Super,
+                },
+            }: [
+                KeybindPipe {
+                    name: Some(
+                        "vc_quick_cmd",
+                    ),
+                    payload: None,
+                    args: None,
+                    plugin: Some(
+                        "compact-bar",
+                    ),
+                    plugin_id: None,
+                    configuration: None,
+                    launch_new: false,
+                    skip_cache: false,
+                    floating: Some(
+                        false,
+                    ),
+                    in_place: None,
+                    cwd: None,
+                    pane_title: None,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                },
+            }: [
+                NewPane {
+                    direction: Some(
+                        Right,
+                    ),
+                    pane_name: None,
+                    start_suppressed: false,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
+                },
+            ],
+            KeyWithModifier {
+                bare_key: Char(
+                    '=',
+                ),
+                key_modifiers: {
+                    Ctrl,
+                    Shift,
+                },
+            }: [
+                NewTab {
+                    tiled_layout: None,
+                    floating_layouts: [],
+                    swap_tiled_layouts: None,
+                    swap_floating_layouts: None,
+                    tab_name: None,
+                    should_change_focus_to_new_tab: true,
+                    cwd: None,
+                    initial_panes: None,
+                    first_pane_unblock_condition: None,
+                    placement: Append,
+                },
+                SwitchToMode {
+                    input_mode: Normal,
                 },
             ],
             KeyWithModifier {
@@ -9056,35 +10312,6 @@ Config {
             }: [
                 MoveFocus {
                     direction: Up,
-                },
-            ],
-            KeyWithModifier {
-                bare_key: Char(
-                    'k',
-                ),
-                key_modifiers: {
-                    Super,
-                },
-            }: [
-                KeybindPipe {
-                    name: Some(
-                        "vc_quick_cmd",
-                    ),
-                    payload: None,
-                    args: None,
-                    plugin: Some(
-                        "compact-bar",
-                    ),
-                    plugin_id: None,
-                    configuration: None,
-                    launch_new: false,
-                    skip_cache: false,
-                    floating: Some(
-                        false,
-                    ),
-                    in_place: None,
-                    cwd: None,
-                    pane_title: None,
                 },
             ],
             KeyWithModifier {
@@ -11237,6 +12464,24 @@ Config {
                 initial_cwd: Some(
                     "/",
                 ),
+            },
+            "frame-host": RunPlugin {
+                _allow_exec_host_cmd: false,
+                location: Zellij(
+                    PluginTag(
+                        "session-manager",
+                    ),
+                ),
+                configuration: PluginUserConfiguration(
+                    {
+                        "frame_host": "true",
+                        "pane_title": "Sessions",
+                        "rail": "true",
+                        "session_canvas": "true",
+                        "session_canvas_kind": "session-manager",
+                    },
+                ),
+                initial_cwd: None,
             },
             "plugin-manager": RunPlugin {
                 _allow_exec_host_cmd: false,
