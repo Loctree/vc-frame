@@ -51,6 +51,7 @@ panes {
         is_floating false
         is_suppressed false
         is_pinned false
+        has_output_activity false
         title "pane 1"
         exited false
         is_held false
@@ -75,6 +76,7 @@ panes {
         is_floating false
         is_suppressed false
         is_pinned false
+        has_output_activity false
         title "pane 1"
         exited false
         is_held false

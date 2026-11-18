@@ -6220,6 +6220,12 @@ impl PaneInfo {
             .and_then(|n| n.entries().iter().next())
             .and_then(|e| e.value().as_bool())
             .unwrap_or(false);
+        // Absent in snapshots that predate the field: quiet, never a failure.
+        let has_output_activity = kdl_document
+            .get("has_output_activity")
+            .and_then(|n| n.entries().iter().next())
+            .and_then(|e| e.value().as_bool())
+            .unwrap_or(false);
         let title = string_node!("title");
         let exited = bool_node!("exited");
         let exit_status = optional_int_node!("exit_status", i32);
@@ -6268,6 +6274,7 @@ impl PaneInfo {
             is_floating,
             is_suppressed,
             is_pinned,
+            has_output_activity,
             title,
             exited,
             exit_status,
@@ -6322,6 +6329,7 @@ impl PaneInfo {
         bool_node!("is_floating", self.is_floating);
         bool_node!("is_suppressed", self.is_suppressed);
         bool_node!("is_pinned", self.is_pinned);
+        bool_node!("has_output_activity", self.has_output_activity);
         string_node!("title", self.title.to_string());
         bool_node!("exited", self.exited);
         if let Some(exit_status) = self.exit_status {
@@ -6453,6 +6461,7 @@ fn serialize_and_deserialize_session_info_with_data() {
             default_bg: None,
             panel_scope: None,
             is_pinned: false,
+            has_output_activity: false,
         },
         PaneInfo {
             id: 1,
@@ -6482,6 +6491,7 @@ fn serialize_and_deserialize_session_info_with_data() {
             default_bg: None,
             panel_scope: None,
             is_pinned: false,
+            has_output_activity: false,
         },
     ];
     let mut panes = HashMap::new();

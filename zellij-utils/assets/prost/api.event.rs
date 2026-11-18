@@ -594,6 +594,10 @@ pub struct PaneInfo {
     /// are never pinned; for them this is always false.
     #[prost(bool, tag="27")]
     pub is_pinned: bool,
+    /// The terminal is producing output right now, as the server observed it
+    /// (pty bytes on consecutive ticks). Always false for plugin panes.
+    #[prost(bool, tag="28")]
+    pub has_output_activity: bool,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

@@ -1981,6 +1981,9 @@ pub(crate) struct Screen {
     copy_options: CopyOptions,
     debug: bool,
     session_name: String,
+    // Which terminals are printing right now; joined into every published
+    // PaneInfo so plugins and other sessions read one fact.
+    output_activity: crate::output_activity::OutputActivity,
     peer_sessions_cache: BTreeMap<String, SessionInfo>, // String is the session name, can
     // also be this session
     resurrectable_sessions_cache: BTreeMap<String, Duration>, // String is the session name,
@@ -3829,6 +3832,7 @@ impl Screen {
             copy_options,
             debug,
             session_name,
+            output_activity: Default::default(),
             peer_sessions_cache,
             default_layout,
             template_generation: 0,
@@ -7846,10 +7850,32 @@ impl Screen {
             .context("failed to update tabs")?;
         Ok(tab_infos_for_screen_state.values().cloned().collect())
     }
+    /// A tab's pane infos as published to plugins, the CLI and the session
+    /// metadata: the tab's own facts plus the output activity Screen observed.
+    fn published_pane_infos(&self, tab: &Tab) -> Vec<PaneInfo> {
+        let mut pane_infos = tab.pane_infos();
+        for pane_info in &mut pane_infos {
+            pane_info.has_output_activity =
+                !pane_info.is_plugin && self.output_activity.is_announced(pane_info.id);
+        }
+        pane_infos
+    }
+
+    /// Called on every session-info tick. Republishes pane state only when a
+    /// terminal started or stopped printing, never per chunk of output.
+    fn refresh_output_activity(&mut self, now: std::time::Instant) -> Result<()> {
+        if self.output_activity.refresh(now) {
+            self.log_and_report_session_state()?;
+        }
+        Ok(())
+    }
+
     fn generate_and_report_pane_state(&mut self) -> Result<PaneManifest> {
         let mut pane_manifest = PaneManifest::default();
         for tab in self.tabs.values() {
-            pane_manifest.panes.insert(tab.position, tab.pane_infos());
+            pane_manifest
+                .panes
+                .insert(tab.position, self.published_pane_infos(tab));
         }
         let mut plugin_updates = vec![];
         let client_ids: Vec<ClientId> = self.active_tab_ids.keys().copied().collect();
@@ -7911,7 +7937,7 @@ impl Screen {
         let mut pane_entries = Vec::new();
 
         for tab in self.tabs.values() {
-            let pane_infos = tab.pane_infos();
+            let pane_infos = self.published_pane_infos(tab);
 
             for pane_info in pane_infos {
                 if should_include_pane(&pane_info, show_all) {
@@ -11695,15 +11721,22 @@ pub(crate) fn screen_thread_main(params: ScreenThreadParams) -> Result<()> {
                 let all_tabs = screen.get_tabs_mut();
                 let mut vte_bytes = Some(vte_bytes);
                 let mut consumed_by_target = false;
+                let mut terminal_printed = false;
                 for tab in all_tabs.values_mut() {
                     if tab.has_terminal_pid(pid) {
                         if let Some(bytes) = vte_bytes.take() {
+                            terminal_printed = true;
                             consumed_by_target = tab
                                 .handle_pty_bytes(pid, bytes)
                                 .context("failed to process pty bytes")?;
                         }
                         break;
                     }
+                }
+                if terminal_printed {
+                    screen
+                        .output_activity
+                        .note_output(pid, std::time::Instant::now());
                 }
                 let ready = screen
                     .note_workspace_projection_pty_bytes(pid, consumed_by_target)
@@ -16777,6 +16810,7 @@ pub(crate) fn screen_thread_main(params: ScreenThreadParams) -> Result<()> {
             },
             ScreenInstruction::UpdateSessionInfos(new_session_infos, resurrectable_sessions) => {
                 screen.update_session_infos(new_session_infos, resurrectable_sessions)?;
+                screen.refresh_output_activity(std::time::Instant::now())?;
             },
             ScreenInstruction::UpdateAvailableLayouts(layouts, errors) => {
                 screen.update_available_layouts(layouts, errors);
