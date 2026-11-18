@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [4.5.4] - 2026-11-18
+
+- Align the Frame workspace and local dependency versions with Vibecrafted 4.5.4. Vibecrafted now refuses a Frame pin whose version differs from its own.
 - Keep the new-tab control and active tab visible when the tab strip is crowded.
 - Show producer activity and attention state in the session rail, while rejecting stale identities.
 - Show every terminal that is printing in the session rail, in all sessions. The server observes sustained pane output and publishes it as `has_output_activity`; the rail no longer depends on a program animating its terminal title.
