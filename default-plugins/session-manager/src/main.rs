@@ -5623,6 +5623,43 @@ mod rail_tests {
     }
 
     #[test]
+    fn rail_announces_observed_output_without_a_title_frame() {
+        let quiet = TabUiInfo::for_rail_test("Shell", false, "cargo", 1);
+        let printing = TabUiInfo::for_rail_test("Shell", false, "cargo", 1).with_output_activity();
+
+        assert_eq!(
+            format_process_tab_rail_entry(&quiet, RailWidthMode::Wide),
+            "   ○ Shell · cargo"
+        );
+        assert_eq!(
+            format_process_tab_rail_entry(&printing, RailWidthMode::Wide),
+            "   ○ ⠿ Shell · cargo"
+        );
+        assert_eq!(
+            format_process_tab_rail_entry(&printing, RailWidthMode::Dense),
+            "   ○⠿"
+        );
+        // A producer label without a frame (a provider that never animates
+        // its title) cannot withdraw what the server observed.
+        assert_eq!(
+            format_process_tab_rail_entry_with_label(
+                &printing,
+                RailWidthMode::Wide,
+                "claude",
+                Some(("claude", None)),
+            ),
+            "   ○ ⠿ claude"
+        );
+        // Attention still outranks activity.
+        let mut ringing = printing.clone();
+        ringing.has_bell_notification = true;
+        assert_eq!(
+            format_process_tab_rail_entry(&ringing, RailWidthMode::Wide),
+            "   ○ [!] Shell · cargo"
+        );
+    }
+
+    #[test]
     fn rail_strips_spinner_frame_but_keeps_meaningful_process_progress() {
         let spinning = TabUiInfo::for_rail_test("resume-codex", true, "⣧ vc", 1);
         let progressing = TabUiInfo::for_rail_test("resume-codex", true, "⣇ indexing workspace", 1);

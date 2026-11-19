@@ -235,6 +235,16 @@ impl TabUiInfo {
             .map(|process| process.label.as_str())
     }
     pub fn native_tab_activity(&self, projected_activity: Option<bool>) -> bool {
+        // Output the server observed is a census fact of its own. A title
+        // without a frame or an idle producer projection cannot withdraw it:
+        // most programs print without ever announcing themselves in a title.
+        if self
+            .live_processes
+            .iter()
+            .any(|process| process.has_output_activity)
+        {
+            return true;
+        }
         let native = self
             .live_processes
             .iter()
@@ -275,9 +285,17 @@ impl TabUiInfo {
                 .map(|index| LiveProcessUiInfo {
                     label: process_label.to_owned(),
                     is_focused: index == 0,
+                    has_output_activity: false,
                 })
                 .collect(),
         }
+    }
+    #[cfg(test)]
+    pub fn with_output_activity(mut self) -> Self {
+        for process in &mut self.live_processes {
+            process.has_output_activity = true;
+        }
+        self
     }
     pub fn line_count(&self, selected_index: &SelectedIndex) -> usize {
         let mut line_count = 1;
@@ -305,6 +323,8 @@ impl TabUiInfo {
 struct LiveProcessUiInfo {
     label: String,
     is_focused: bool,
+    // The server saw this terminal printing; independent of its title.
+    has_output_activity: bool,
 }
 
 impl LiveProcessUiInfo {
@@ -322,6 +342,7 @@ impl LiveProcessUiInfo {
         Self {
             label,
             is_focused: pane_info.is_focused,
+            has_output_activity: pane_info.has_output_activity,
         }
     }
 }

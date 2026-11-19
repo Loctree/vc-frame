@@ -444,6 +444,9 @@ message PaneInfo {
     // The floating-frame pin ("PIN ○/●", pane geom is_pinned). Tiled panes
     // are never pinned; for them this is always false.
     bool is_pinned = 27;
+    // The terminal is producing output right now, as the server observed it
+    // (pty bytes on consecutive ticks). Always false for plugin panes.
+    bool has_output_activity = 28;
 }
 
 message PanelScope {

@@ -2553,6 +2553,11 @@ pub struct PaneInfo {
     /// (rendered "PIN ●" in its frame) and survives Panels guest visits as a
     /// Global panel. Tiled panes are never pinned.
     pub is_pinned: bool,
+    /// Whether this terminal is producing output right now, as the server
+    /// observed it: the pty delivered bytes on consecutive observation ticks
+    /// and has not yet gone quiet. A native fact about the pane, whatever
+    /// runs in it; plugin panes never set it.
+    pub has_output_activity: bool,
 }
 
 /// Scope of a pane on the Panels layer over the guest canvas.

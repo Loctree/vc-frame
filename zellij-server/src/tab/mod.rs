@@ -8345,6 +8345,8 @@ pub fn pane_info_for_pane(
             .and_then(|(x, y, is_visible)| if is_visible { Some((x, y)) } else { None }),
         is_selectable: pane.selectable(),
         is_pinned: pane.position_and_size().is_pinned,
+        // Observed by the pty thread, joined in by Screen when it publishes.
+        has_output_activity: false,
         title: pane.current_title(),
         exited: pane.exited(),
         exit_status: pane.exit_status(),
