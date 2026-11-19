@@ -4,8 +4,9 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
-## [Unreleased]
+## [4.6.0] - 2026-11-20
 
+- vc-frame is released as its own product on its own SemVer. Vibecrafted 4.6.0 requires an installed vc-frame `>=4.5.1,<5.0.0` on PATH and no longer builds Frame into its runtime; its source pin must name a Frame inside that range.
 - Sign standalone macOS full/no-web releases for Apple silicon and Intel with Developer ID and hardened runtime; require accepted Apple notarization before archiving. Disposable CI keychains use the existing `VC_CERT_*` / `VC_NOTARY_*` secret conventions.
 - Add `scripts/sign-darwin.sh` for maintainer builds, selecting Developer ID when available and ad-hoc otherwise. Local Darwin packages sign before their archive and receipt hashes are created, without notarizing or publishing.
 - Document standalone macOS installation and independent Cargo-owned vc-frame SemVer; existing tags and bundled runtime coupling remain unchanged.
