@@ -772,6 +772,10 @@ impl WindowsPtyBackend {
         Ok(())
     }
 
+    /// ConPTY queues every resize as a console event for the program to read,
+    /// so there is no lost signal to deliver again.
+    pub fn redeliver_window_change(&self, _terminal_id: u32) {}
+
     pub fn write_to_tty_stdin(&self, terminal_id: u32, buf: &[u8]) -> Result<usize> {
         let err_context = || format!("failed to write to stdin of terminal {}", terminal_id);
 

@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - Sign standalone macOS full/no-web releases for Apple silicon and Intel with Developer ID and hardened runtime; require accepted Apple notarization before archiving. Disposable CI keychains use the existing `VC_CERT_*` / `VC_NOTARY_*` secret conventions.
 - Add `scripts/sign-darwin.sh` for maintainer builds, selecting Developer ID when available and ad-hoc otherwise. Local Darwin packages sign before their archive and receipt hashes are created, without notarizing or publishing.
 - Document standalone macOS installation and independent Cargo-owned vc-frame SemVer; existing tags and bundled runtime coupling remain unchanged.
+- Signal a pane's foreground process group with SIGWINCH once more 150 ms after its size stops changing. A program that drops the last signal of a resize burst, such as a host font zoom, otherwise keeps laying out for the old width; the kernel does not signal a repeated size by itself.
 
 ## [4.5.4] - 2026-11-18
 

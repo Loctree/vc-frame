@@ -3,9 +3,10 @@ use crate::os_input_output::{AsyncReader, ServerOsApi};
 use crate::panes::PaneId;
 use crate::thread_bus::{Bus, ThreadSenders};
 use interprocess::local_socket::Stream as LocalSocketStream;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use zellij_utils::channels::SenderWithContext;
 use zellij_utils::data::Palette;
 
@@ -35,6 +36,10 @@ struct MockServerOsApi {
     write_behavior: Arc<Mutex<HashMap<u32, WriteBehavior>>>,
     /// Log of (terminal_id, bytes) for each successful write.
     write_log: WriteLog,
+    /// Answers for successive `redeliver_settled_resizes` calls; empty = none.
+    settle_answers: Arc<Mutex<VecDeque<Duration>>>,
+    /// How many times the writer asked to redeliver settled resizes.
+    settle_calls: Arc<Mutex<usize>>,
 }
 
 impl MockServerOsApi {
@@ -42,6 +47,8 @@ impl MockServerOsApi {
         MockServerOsApi {
             write_behavior: Arc::new(Mutex::new(HashMap::new())),
             write_log: Arc::new(Mutex::new(Vec::new())),
+            settle_answers: Arc::new(Mutex::new(VecDeque::new())),
+            settle_calls: Arc::new(Mutex::new(0)),
         }
     }
     fn set_behavior(&self, terminal_id: u32, behavior: WriteBehavior) {
@@ -168,6 +175,10 @@ impl ServerOsApi for MockServerOsApi {
     }
     fn clear_terminal_id(&self, _terminal_id: u32) -> Result<()> {
         Ok(())
+    }
+    fn redeliver_settled_resizes(&self) -> Option<Duration> {
+        *self.settle_calls.lock().unwrap() += 1;
+        self.settle_answers.lock().unwrap().pop_front()
     }
 }
 
@@ -350,4 +361,29 @@ fn write_error_clears_terminal_queue() {
     // Terminal 2 should be unaffected
     let written_2 = mock_clone.get_written_bytes(2);
     assert_eq!(written_2, b"should work");
+}
+
+#[test]
+fn settling_resize_wakes_the_writer_without_a_new_instruction() {
+    // A resized terminal is due for its repeated SIGWINCH 20 ms later, and
+    // once more after that; the writer must wake for both on its own instead
+    // of blocking until the next instruction arrives.
+    let mock = MockServerOsApi::new();
+    mock.settle_answers
+        .lock()
+        .unwrap()
+        .extend([Duration::from_millis(20), Duration::from_millis(20)]);
+    let settle_calls = mock.settle_calls.clone();
+
+    let (bus, sender) = make_test_bus(mock);
+    sender
+        .send(PtyWriteInstruction::ResizePty(1, 120, 40, None, None))
+        .unwrap();
+    let writer = std::thread::spawn(move || pty_writer_main(bus).unwrap());
+    std::thread::sleep(Duration::from_millis(300));
+    sender.send(PtyWriteInstruction::Exit).unwrap();
+    writer.join().unwrap();
+
+    // After the resize, then after each of the two settle deadlines.
+    assert_eq!(*settle_calls.lock().unwrap(), 3);
 }
