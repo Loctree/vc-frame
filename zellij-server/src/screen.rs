@@ -6646,10 +6646,11 @@ impl Screen {
                 self.osc8_hyperlinks,
             );
 
-            let has_plain_subscribers = self.pane_render_subscribers.values().any(|s| !s.ansi);
+            // A CLI subscriber, ANSI or not, is served from the plain pane map
+            // (deliver_to_pane_subscribers_from_report); ANSI adds a second map.
+            let has_cli_subscribers = !self.pane_render_subscribers.is_empty();
             let has_ansi_subscribers = self.pane_render_subscribers.values().any(|s| s.ansi);
-            output.collect_pane_contents =
-                has_plain_subscribers || self.plugins_need_pane_contents;
+            output.collect_pane_contents = has_cli_subscribers || self.plugins_need_pane_contents;
             output.collect_ansi_pane_contents =
                 has_ansi_subscribers || self.plugins_need_ansi_pane_contents;
 

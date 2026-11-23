@@ -3552,11 +3552,9 @@ impl WasmBridge {
         let (any_plugin_needs_plain, any_plugin_needs_ansi) = {
             let mut plugin_map = self.plugin_map.lock().unwrap();
             let running = plugin_map.running_plugins_and_subscriptions();
-            let needs_plain = running.iter().any(|(_, _, _, subs)| {
-                subs.lock()
-                    .unwrap()
-                    .contains(&EventType::PaneRenderReport)
-            });
+            let needs_plain = running
+                .iter()
+                .any(|(_, _, _, subs)| subs.lock().unwrap().contains(&EventType::PaneRenderReport));
             let needs_ansi = running.iter().any(|(_, _, _, subs)| {
                 subs.lock()
                     .unwrap()
@@ -3567,8 +3565,7 @@ impl WasmBridge {
 
         // Fresh full report after a subscription gap: a late subscriber must
         // see every pane, not a diff against a stale previous report.
-        let plain_became_needed =
-            any_plugin_needs_plain && !self.last_notified_pane_contents_need;
+        let plain_became_needed = any_plugin_needs_plain && !self.last_notified_pane_contents_need;
         let ansi_became_needed =
             any_plugin_needs_ansi && !self.last_notified_ansi_pane_contents_need;
         if plain_became_needed || ansi_became_needed {
