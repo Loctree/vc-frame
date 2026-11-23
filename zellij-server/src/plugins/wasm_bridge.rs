@@ -887,6 +887,10 @@ pub struct WasmBridge {
     base_modes: HashMap<ClientId, InputMode>,
     downloader: Downloader,
     previous_pane_render_report: Option<PaneRenderReport>,
+    /// Last plain/ANSI pane-render need flags sent to Screen. Used to clear the
+    /// cached report when either need goes false → true (fresh full diff).
+    last_notified_pane_contents_need: bool,
+    last_notified_ansi_pane_contents_need: bool,
     pub last_session_save_time: Arc<Mutex<Option<u64>>>, // milliseconds since UNIX epoch
     layout_plugin_reservations: HashMap<LayoutTransactionId, LayoutPluginReservation>,
     layout_plugin_owners: HashMap<PluginId, LayoutTransactionId>,
@@ -1058,6 +1062,8 @@ impl WasmBridge {
             base_modes: HashMap::new(),
             downloader,
             previous_pane_render_report: None,
+            last_notified_pane_contents_need: false,
+            last_notified_ansi_pane_contents_need: false,
             last_session_save_time: Arc::new(Mutex::new(None)),
             layout_plugin_reservations: HashMap::new(),
             layout_plugin_owners: HashMap::new(),
@@ -1795,7 +1801,7 @@ impl WasmBridge {
         let _ = self
             .senders
             .send_to_background_jobs(BackgroundJob::ReportPluginList(plugin_list));
-        self.notify_screen_of_ansi_subscription_change();
+        self.notify_screen_of_pane_contents_subscription_change();
         Ok(())
     }
 
@@ -3495,12 +3501,12 @@ impl WasmBridge {
     }
 
     fn apply_subscription_effects(
-        &self,
+        &mut self,
         plugin_id: PluginId,
         client_id: ClientId,
         events: &HashSet<EventType>,
     ) {
-        self.notify_screen_of_ansi_subscription_change();
+        self.notify_screen_of_pane_contents_subscription_change();
         self.notify_screen_of_background_plugin_subscriptions(plugin_id, client_id, events.clone());
         if events.contains(&EventType::InitialKeybinds) {
             self.send_initial_keybinds_to_plugin(plugin_id, client_id);
@@ -3542,21 +3548,39 @@ impl WasmBridge {
         }
     }
 
-    pub fn notify_screen_of_ansi_subscription_change(&self) {
-        let any_plugin_needs_ansi = {
+    pub fn notify_screen_of_pane_contents_subscription_change(&mut self) {
+        let (any_plugin_needs_plain, any_plugin_needs_ansi) = {
             let mut plugin_map = self.plugin_map.lock().unwrap();
-            plugin_map
-                .running_plugins_and_subscriptions()
-                .iter()
-                .any(|(_, _, _, subs)| {
-                    subs.lock()
-                        .unwrap()
-                        .contains(&EventType::PaneRenderReportWithAnsi)
-                })
+            let running = plugin_map.running_plugins_and_subscriptions();
+            let needs_plain = running.iter().any(|(_, _, _, subs)| {
+                subs.lock()
+                    .unwrap()
+                    .contains(&EventType::PaneRenderReport)
+            });
+            let needs_ansi = running.iter().any(|(_, _, _, subs)| {
+                subs.lock()
+                    .unwrap()
+                    .contains(&EventType::PaneRenderReportWithAnsi)
+            });
+            (needs_plain, needs_ansi)
         };
+
+        // Fresh full report after a subscription gap: a late subscriber must
+        // see every pane, not a diff against a stale previous report.
+        let plain_became_needed =
+            any_plugin_needs_plain && !self.last_notified_pane_contents_need;
+        let ansi_became_needed =
+            any_plugin_needs_ansi && !self.last_notified_ansi_pane_contents_need;
+        if plain_became_needed || ansi_became_needed {
+            self.previous_pane_render_report = None;
+        }
+        self.last_notified_pane_contents_need = any_plugin_needs_plain;
+        self.last_notified_ansi_pane_contents_need = any_plugin_needs_ansi;
+
         let _ = self
             .senders
-            .send_to_screen(ScreenInstruction::PluginSubscribedToAnsiPaneContents(
+            .send_to_screen(ScreenInstruction::PluginSubscribedToPaneContents(
+                any_plugin_needs_plain,
                 any_plugin_needs_ansi,
             ));
     }
