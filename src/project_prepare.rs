@@ -152,7 +152,7 @@ fn selected_runtime() -> Result<SelectedRuntime, String> {
     let executable = std::env::current_exe()
         .and_then(|path| path.canonicalize())
         .map_err(|error| format!("cannot identify this Frame engine: {error}"))?;
-    validate_runtime_engine(&root, &frame_entry, &executable)?;
+    validate_runtime_engine(&root, &python, &frame_entry, &executable)?;
     Ok(SelectedRuntime {
         root,
         python,
@@ -160,8 +160,20 @@ fn selected_runtime() -> Result<SelectedRuntime, String> {
     })
 }
 
+fn ensure_physical_path(path: &Path, label: &str) -> Result<(), String> {
+    for ancestor in path.ancestors() {
+        let metadata = std::fs::symlink_metadata(ancestor)
+            .map_err(|error| format!("{label} is unavailable: {error}"))?;
+        if metadata.file_type().is_symlink() {
+            return Err(format!("{label} must be physical"));
+        }
+    }
+    Ok(())
+}
+
 fn validate_runtime_engine(
     root: &Path,
+    python: &Path,
     frame_entry: &Path,
     executable: &Path,
 ) -> Result<(), String> {
@@ -170,30 +182,47 @@ fn validate_runtime_engine(
     } else {
         "libexec/vc-frame"
     });
-    let expected = if std::fs::symlink_metadata(&installed_engine).is_ok() {
+    if std::fs::symlink_metadata(&installed_engine).is_ok() {
         // The public product entry is a wrapper, not the running engine. Both
         // belong physically to this selected generation; following an engine
         // or entry link outside it would lose that provenance.
-        for member in [frame_entry, installed_engine.as_path()] {
-            for ancestor in member.ancestors() {
-                let metadata = std::fs::symlink_metadata(ancestor)
-                    .map_err(|error| format!("selected Frame runtime is unavailable: {error}"))?;
-                if metadata.file_type().is_symlink() {
-                    return Err("selected Frame entry and engine must be physical".to_owned());
-                }
-            }
+        ensure_physical_path(frame_entry, "selected Frame runtime")?;
+        ensure_physical_path(&installed_engine, "selected Frame runtime")?;
+        if installed_engine.canonicalize().ok().as_deref() != Some(executable) {
+            return Err("this Frame engine does not belong to the selected Runtime Pack".to_owned());
         }
-        installed_engine
-    } else {
+        return Ok(());
+    }
+    if frame_entry.canonicalize().ok().as_deref() == Some(executable) {
         // Existing developer runtimes expose the native engine itself at the
         // bin door. Preserve their exact-engine check without claiming that
         // this is an installed product-wrapper generation.
-        frame_entry.to_owned()
-    };
-    if expected.canonicalize().ok().as_deref() != Some(executable) {
-        return Err("this Frame engine does not belong to the selected Runtime Pack".to_owned());
+        return Ok(());
     }
-    Ok(())
+    let external_resolver = root.join("vibecrafted-core/vibecrafted_core/external_products.py");
+    if external_resolver.is_file() {
+        // Unbundled Darwin Runtime Packs delegate `bin/vc-frame` to an
+        // independently released binary resolved by `external_products.py frame`.
+        ensure_physical_path(frame_entry, "selected Frame entry")?;
+        ensure_physical_path(python, "selected runtime Python")?;
+        ensure_physical_path(&external_resolver, "selected external product resolver")?;
+        let output = Command::new(python)
+            .args(["-I", "-B"])
+            .arg(&external_resolver)
+            .arg("frame")
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|error| format!("cannot resolve selected Frame engine: {error}"))?;
+        if output.status.success() {
+            let resolved = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+            if !resolved.is_empty()
+                && PathBuf::from(resolved).canonicalize().ok().as_deref() == Some(executable)
+            {
+                return Ok(());
+            }
+        }
+    }
+    Err("this Frame engine does not belong to the selected Runtime Pack".to_owned())
 }
 
 fn retained_layout(opts: &CliArgs, serialized: Option<&str>) -> Result<Option<PathBuf>, String> {
@@ -462,16 +491,22 @@ mod tests {
             "bin/vc-frame"
         });
         std::fs::write(&entry, "public product wrapper").unwrap();
+        let python = root.join(if cfg!(windows) {
+            "bin/python.exe"
+        } else {
+            "bin/python3"
+        });
+        std::fs::write(&python, "").unwrap();
         let engine = root.join(if cfg!(windows) {
             "libexec/vc-frame.exe"
         } else {
             "libexec/vc-frame"
         });
         std::fs::copy(std::env::current_exe().unwrap(), &engine).unwrap();
-        validate_runtime_engine(&root, &entry, &engine).unwrap();
+        validate_runtime_engine(&root, &python, &entry, &engine).unwrap();
         let unrelated = root.join("unrelated-native-engine");
         std::fs::copy(&engine, &unrelated).unwrap();
-        assert!(validate_runtime_engine(&root, &entry, &unrelated).is_err());
+        assert!(validate_runtime_engine(&root, &python, &entry, &unrelated).is_err());
     }
 
     #[cfg(unix)]
@@ -481,17 +516,69 @@ mod tests {
         let root = fixture.path().canonicalize().unwrap();
         std::fs::create_dir(root.join("bin")).unwrap();
         std::fs::create_dir(root.join("libexec")).unwrap();
+        let python = root.join("bin/python3");
+        std::fs::write(&python, "").unwrap();
         let entry = root.join("bin/vc-frame");
         std::fs::write(&entry, "public product wrapper").unwrap();
         let foreign = std::env::current_exe().unwrap().canonicalize().unwrap();
         std::os::unix::fs::symlink(&foreign, root.join("libexec/vc-frame")).unwrap();
-        assert!(validate_runtime_engine(&root, &entry, &foreign).is_err());
+        assert!(validate_runtime_engine(&root, &python, &entry, &foreign).is_err());
         std::fs::remove_file(root.join("libexec/vc-frame")).unwrap();
         std::fs::remove_file(&entry).unwrap();
         // The separately supported developer bin door retains its existing
         // exact-current-engine behavior; it is not an installed wrapper.
         std::os::unix::fs::symlink(&foreign, &entry).unwrap();
-        validate_runtime_engine(&root, &entry, &foreign).unwrap();
+        validate_runtime_engine(&root, &python, &entry, &foreign).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unbundled_runtime_pack_resolves_external_frame_engine_physically() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let fixture = tempfile::tempdir().unwrap();
+        let root = fixture.path().canonicalize().unwrap();
+        std::fs::create_dir_all(root.join("bin")).unwrap();
+        std::fs::create_dir_all(root.join("libexec")).unwrap();
+        std::fs::create_dir_all(root.join("vibecrafted-core/vibecrafted_core")).unwrap();
+
+        let entry = root.join("bin/vc-frame");
+        std::fs::write(&entry, "#!/bin/sh\necho wrapper\n").unwrap();
+        let current = std::env::current_exe().unwrap().canonicalize().unwrap();
+        let unrelated = root.join("other-vc-frame");
+        std::fs::write(&unrelated, "other").unwrap();
+        let unrelated = unrelated.canonicalize().unwrap();
+
+        let python = root.join("bin/python3");
+        // Stub python3 ignores `-I -B` and executes the resolver script with `sh` or reads its output.
+        std::fs::write(&python, "#!/bin/sh\nexec /bin/sh \"$3\" \"$4\"\n").unwrap();
+        std::fs::set_permissions(&python, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let resolver = root.join("vibecrafted-core/vibecrafted_core/external_products.py");
+        std::fs::write(&resolver, format!("#!/bin/sh\nprintf '%s\\n' '{}'\n", current.display())).unwrap();
+        validate_runtime_engine(&root, &python, &entry, &current).unwrap();
+
+        // Resolver points to another binary -> rejected.
+        std::fs::write(&resolver, format!("#!/bin/sh\nprintf '%s\\n' '{}'\n", unrelated.display())).unwrap();
+        assert!(validate_runtime_engine(&root, &python, &entry, &current).is_err());
+
+        // Resolver exits 69 (unavailable/mismatch) -> rejected.
+        std::fs::write(&resolver, "#!/bin/sh\nexit 69\n").unwrap();
+        assert!(validate_runtime_engine(&root, &python, &entry, &current).is_err());
+
+        // Symlinked entry or resolver -> rejected even if resolver returns current.
+        std::fs::write(&resolver, format!("#!/bin/sh\nprintf '%s\\n' '{}'\n", current.display())).unwrap();
+        let real_entry = root.join("bin/vc-frame-real");
+        std::fs::rename(&entry, &real_entry).unwrap();
+        std::os::unix::fs::symlink(&real_entry, &entry).unwrap();
+        assert!(validate_runtime_engine(&root, &python, &entry, &current).is_err());
+
+        std::fs::remove_file(&entry).unwrap();
+        std::fs::rename(&real_entry, &entry).unwrap();
+        let real_resolver = root.join("vibecrafted-core/vibecrafted_core/real_resolver.py");
+        std::fs::rename(&resolver, &real_resolver).unwrap();
+        std::os::unix::fs::symlink(&real_resolver, &resolver).unwrap();
+        assert!(validate_runtime_engine(&root, &python, &entry, &current).is_err());
     }
 
     fn receipt(root: &Path, socket_dir: &Path) -> Admission {
