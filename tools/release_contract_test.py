@@ -662,7 +662,7 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertNotIn("--clobber", workflow)
         self.assertEqual(
             workflow.count("gh release upload"),
-            11,
+            12,
             "every release asset class must use the maintained GitHub CLI path",
         )
         for required in (
@@ -686,7 +686,7 @@ class ReleaseContractTests(unittest.TestCase):
             "manifest.json.sig",
             'printf \'  "git_sha": "%s",\\n\' "$git_sha"',
             "manifest_primary_fingerprints",
-            'test "${#signatures[@]}" -eq 9',
+            'test "${#signatures[@]}" -eq 13',
             'test "$manifest_git_sha" = "$GITHUB_SHA"',
             'cmp -s "$asset_contract_dir/expected" "$asset_contract_dir/actual"',
             "release asset set does not exactly match the canonical contract",
@@ -705,8 +705,8 @@ class ReleaseContractTests(unittest.TestCase):
         )
         self.assertEqual(
             workflow.count('--local-user "$expected_fingerprint"'),
-            4,
-            "canary, both Unix artifact lanes, and manifest must select the pinned key",
+            5,
+            "canary, Unix and Windows artifact lanes, and manifest must select the pinned key",
         )
         self.assertGreaterEqual(
             workflow.count("--status-fd 1"),

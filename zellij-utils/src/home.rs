@@ -32,28 +32,54 @@ pub fn find_default_config_dir() -> Option<PathBuf> {
 
 /// Order in which config directories are checked.
 ///
-/// `home` first, then the vibecrafted frontier install path, then XDG and the
+/// `home` first, then the installed Vibecrafted Frame config directory,
+/// then the vibecrafted frontier install path, then XDG and the
 /// system default. Env `VC_FRAME_CONFIG_DIR` is handled by the CLI layer before
 /// this list is consulted.
 pub fn default_config_dirs() -> Vec<Option<PathBuf>> {
+    default_config_dirs_from(home_config_dir(), Some(xdg_config_dir()))
+}
+
+fn default_config_dirs_from(
+    home: Option<PathBuf>,
+    xdg: Option<PathBuf>,
+) -> Vec<Option<PathBuf>> {
+    let vibecrafted = home.as_deref().and_then(vibecrafted_config_dir_from_home);
+    let frontier = home.as_deref().and_then(frontier_config_dir_from_home);
     vec![
-        home_config_dir(),
-        frontier_config_dir(),
-        Some(xdg_config_dir()),
+        home,
+        vibecrafted,
+        frontier,
+        xdg,
         Some(Path::new(SYSTEM_DEFAULT_CONFIG_DIR).to_path_buf()),
     ]
+}
+
+fn vibecrafted_config_dir_from_home(home: &Path) -> Option<PathBuf> {
+    // home_config_dir returns ~/.config/vc-frame — climb to ~/.config
+    home.parent()
+        .map(|cfg| cfg.join("vibecrafted/vc-frame"))
+}
+
+fn frontier_config_dir_from_home(home: &Path) -> Option<PathBuf> {
+    // home_config_dir returns ~/.config/vc-frame — climb to ~/.config
+    home.parent()
+        .map(|cfg| cfg.join("vetcoders/frontier/vc-frame"))
+}
+
+/// Installed Vibecrafted Frame config directory: `~/.config/vibecrafted/vc-frame`.
+/// Used when vc-frame is launched directly without wrapper env overrides.
+pub fn vibecrafted_config_dir() -> Option<PathBuf> {
+    platform::home_config_dir()
+        .map(|home| vibecrafted_config_dir_from_home(&home).unwrap_or(home))
 }
 
 /// Operator frontier install: `~/.config/vetcoders/frontier/vc-frame`.
 /// Present on machines launched through vibecrafted; must beat an empty
 /// legacy home dir so configless GUI sessions land on real chrome.
 pub fn frontier_config_dir() -> Option<PathBuf> {
-    platform::home_config_dir().map(|home| {
-        // home_config_dir returns ~/.config/vc-frame — climb to ~/.config
-        home.parent()
-            .map(|cfg| cfg.join("vetcoders/frontier/vc-frame"))
-            .unwrap_or(home)
-    })
+    platform::home_config_dir()
+        .map(|home| frontier_config_dir_from_home(&home).unwrap_or(home))
 }
 
 /// Looks for an existing dir, uses that, else returns a
@@ -99,4 +125,29 @@ pub fn get_theme_dir(config_dir: Option<PathBuf>) -> Option<PathBuf> {
 
 pub fn default_theme_dir() -> Option<PathBuf> {
     find_default_config_dir().map(|dir| dir.join("themes"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_config_dirs_places_vibecrafted_before_frontier() {
+        let home = PathBuf::from("/Users/tester/.config/vc-frame");
+        let xdg = PathBuf::from("/Users/tester/.config/vc-frame-xdg");
+        let dirs: Vec<PathBuf> = default_config_dirs_from(Some(home.clone()), Some(xdg.clone()))
+            .into_iter()
+            .flatten()
+            .collect();
+        assert_eq!(
+            dirs,
+            vec![
+                home,
+                PathBuf::from("/Users/tester/.config/vibecrafted/vc-frame"),
+                PathBuf::from("/Users/tester/.config/vetcoders/frontier/vc-frame"),
+                xdg,
+                PathBuf::from(SYSTEM_DEFAULT_CONFIG_DIR),
+            ]
+        );
+    }
 }

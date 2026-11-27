@@ -466,7 +466,7 @@ pub enum ScreenContext {
     PreviousSwapLayoutWithTabId,
     NextSwapLayoutWithTabId,
     MoveTabWithTabId,
-    PluginSubscribedToAnsiPaneContents,
+    PluginSubscribedToPaneContents,
     UpdateBackgroundPluginSubscriptions,
     BroadcastModeUpdate,
 }

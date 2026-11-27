@@ -71,6 +71,21 @@ pub(super) fn has_product_context() -> bool {
     })
 }
 
+fn format_project_open_error(stderr: &[u8]) -> String {
+    let detail = String::from_utf8_lossy(stderr);
+    let detail = detail.trim();
+    if detail.is_empty() {
+        return "The selected runtime refused project preparation. The current session was preserved.".to_owned();
+    }
+    if detail.starts_with("Project could not be opened:") {
+        return detail.chars().take(1600).collect();
+    }
+    format!(
+        "Project could not be opened: {}",
+        detail.chars().take(1600).collect::<String>()
+    )
+}
+
 impl State {
     pub(super) fn prepare_project(
         &mut self,
@@ -187,16 +202,7 @@ impl State {
                     return Some(false);
                 }
                 if *code != Some(0) {
-                    let detail = String::from_utf8_lossy(stderr);
-                    let detail = detail.trim();
-                    let message = if detail.is_empty() {
-                        "The selected runtime refused project preparation. The current session was preserved.".to_owned()
-                    } else {
-                        format!(
-                            "Project could not be opened: {}",
-                            detail.chars().take(1600).collect::<String>()
-                        )
-                    };
+                    let message = format_project_open_error(stderr);
                     return Some(self.reject_project_open(&message));
                 }
                 match serde_json::from_slice::<ProjectAdmission>(stdout) {
@@ -406,5 +412,21 @@ mod tests {
         state.update(result("request-1", "life-1"));
         assert!(state.pending_project_open.is_none());
         assert!(state.pending_session_switch.is_none());
+    }
+
+    #[test]
+    fn failed_project_open_does_not_duplicate_prefix() {
+        assert_eq!(
+            format_project_open_error(b"Project could not be opened: bad engine\n"),
+            "Project could not be opened: bad engine"
+        );
+        assert_eq!(
+            format_project_open_error(b"foreign owner\n"),
+            "Project could not be opened: foreign owner"
+        );
+        assert_eq!(
+            format_project_open_error(b"   "),
+            "The selected runtime refused project preparation. The current session was preserved."
+        );
     }
 }

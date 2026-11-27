@@ -46,9 +46,9 @@ jobs:
       # signing subkey. The step below performs data-only checks and a canary.
       - name: Verify version and signing inputs
         env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-          GPG_PUBLIC_KEY: ${{ secrets.GPG_PUBLIC_KEY }}
+          GPG_PRIVATE_KEY: ${{ secrets.LOCTREE_GPG_PRIVATE_KEY || secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.LOCTREE_GPG_PASSPHRASE || secrets.GPG_PASSPHRASE }}
+          GPG_PUBLIC_KEY: ${{ secrets.LOCTREE_GPG_PUBLIC_KEY || secrets.GPG_PUBLIC_KEY }}
         run: |
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
           installer_version="$(sed -n 's/^VERSION="${VCFRAME_VERSION:-\([^}]*\)}"/\1/p' tools/install.sh)"
@@ -68,15 +68,24 @@ jobs:
             }
           fi
           test -n "${GPG_PRIVATE_KEY:-}" || {
-            echo "GPG_PRIVATE_KEY secret is required for release candidates and tags" >&2
-            exit 1
-          }
-          test -n "${GPG_PUBLIC_KEY:-}" || {
-            echo "GPG_PUBLIC_KEY secret is required for release candidates and tags" >&2
+            echo "LOCTREE_GPG_PRIVATE_KEY or GPG_PRIVATE_KEY secret is required for release candidates and tags" >&2
             exit 1
           }
           test -n "$expected_fingerprint" || {
             echo "tools/install.sh must pin DEFAULT_GPG_FINGERPRINT before release" >&2
+            exit 1
+          }
+          signing_home="$(mktemp -d)"
+          verify_home="$(mktemp -d)"
+          chmod 700 "$signing_home" "$verify_home"
+          trap 'gpgconf --homedir "$signing_home" --kill all 2>/dev/null || true; rm -rf "$signing_home" "$verify_home"' EXIT
+          printf '%s\n' "$GPG_PRIVATE_KEY" |
+            gpg --homedir "$signing_home" --batch --import
+          if [ -z "${GPG_PUBLIC_KEY:-}" ]; then
+            GPG_PUBLIC_KEY="$(gpg --homedir "$signing_home" --batch --armor --export "$expected_fingerprint")"
+          fi
+          test -n "${GPG_PUBLIC_KEY:-}" || {
+            echo "GPG_PUBLIC_KEY secret (or export from private key) is required for release candidates and tags" >&2
             exit 1
           }
           key_file="$RUNNER_TEMP/vc-frame-release-key.asc"
@@ -97,12 +106,6 @@ jobs:
             echo "GPG_PUBLIC_KEY must contain exactly the pinned primary trust root" >&2
             exit 1
           }
-          signing_home="$(mktemp -d)"
-          verify_home="$(mktemp -d)"
-          chmod 700 "$signing_home" "$verify_home"
-          trap 'rm -rf "$signing_home" "$verify_home"' EXIT
-          printf '%s\n' "$GPG_PRIVATE_KEY" |
-            gpg --homedir "$signing_home" --batch --import
           printf '%s\n' "$GPG_PUBLIC_KEY" |
             gpg --homedir "$verify_home" --batch --import
           if [ "$GITHUB_EVENT_NAME" = push ]; then
@@ -311,15 +314,15 @@ jobs:
         uses: ./.github/actions/sign-darwin
         with:
           binary: target/${{ matrix.target }}/release/vc-frame
-          certificate-p12-b64: ${{ secrets.VC_CERT_P12_B64 }}
-          certificate-password: ${{ secrets.VC_CERT_PASSWORD }}
-          signing-identity: ${{ secrets.VC_SIGNING_IDENTITY }}
+          certificate-p12-b64: ${{ secrets.LOCTREE_MACOS_CERT_P12_BASE64 || secrets.VC_CERT_P12_B64 }}
+          certificate-password: ${{ secrets.LOCTREE_MACOS_CERT_PASSWORD || secrets.VC_CERT_PASSWORD }}
+          signing-identity: ${{ secrets.LOCTREE_MACOS_SIGNING_IDENTITY || secrets.VC_SIGNING_IDENTITY }}
           notary-api-key-b64: ${{ secrets.VC_NOTARY_API_KEY_B64 }}
           notary-api-key-id: ${{ secrets.VC_NOTARY_API_KEY_ID }}
           notary-api-issuer: ${{ secrets.VC_NOTARY_API_ISSUER }}
-          notary-apple-id: ${{ secrets.VC_NOTARY_APPLE_ID }}
-          notary-password: ${{ secrets.VC_NOTARY_PASSWORD }}
-          notary-team-id: ${{ secrets.VC_NOTARY_TEAM_ID }}
+          notary-apple-id: ${{ secrets.LOCTREE_NOTARY_APPLE_ID || secrets.VC_NOTARY_APPLE_ID }}
+          notary-password: ${{ secrets.LOCTREE_NOTARY_PASSWORD || secrets.VC_NOTARY_PASSWORD }}
+          notary-team-id: ${{ secrets.LOCTREE_NOTARY_TEAM_ID || secrets.VC_NOTARY_TEAM_ID }}
 
       - name: Create artifact (Unix)
         if: runner.os != 'Windows'
@@ -375,8 +378,8 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_PRIVATE_KEY: ${{ secrets.LOCTREE_GPG_PRIVATE_KEY || secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.LOCTREE_GPG_PASSPHRASE || secrets.GPG_PASSPHRASE }}
         run: |
           test -n "${GPG_PRIVATE_KEY:-}" || {
             echo "GPG_PRIVATE_KEY secret not set" >&2
@@ -491,6 +494,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ env.RELEASE_TAG }}" "${{ steps.make-checksum-msi.outputs.checksum_name }}" --repo "${{ github.repository }}"
 
+      - name: Stage Windows artifacts for GPG signing
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dist-windows-normal-${{ matrix.target }}
+          path: |
+            ${{ steps.make-artifact-windows.outputs.asset_name }}
+            target/wix/vc-frame-${{ matrix.target }}-installer.msi
+          if-no-files-found: error
+
   build-release-noweb:
     needs: create-release
     name: build-release-noweb
@@ -581,15 +594,15 @@ jobs:
         uses: ./.github/actions/sign-darwin
         with:
           binary: target/${{ matrix.target }}/release/vc-frame
-          certificate-p12-b64: ${{ secrets.VC_CERT_P12_B64 }}
-          certificate-password: ${{ secrets.VC_CERT_PASSWORD }}
-          signing-identity: ${{ secrets.VC_SIGNING_IDENTITY }}
+          certificate-p12-b64: ${{ secrets.LOCTREE_MACOS_CERT_P12_BASE64 || secrets.VC_CERT_P12_B64 }}
+          certificate-password: ${{ secrets.LOCTREE_MACOS_CERT_PASSWORD || secrets.VC_CERT_PASSWORD }}
+          signing-identity: ${{ secrets.LOCTREE_MACOS_SIGNING_IDENTITY || secrets.VC_SIGNING_IDENTITY }}
           notary-api-key-b64: ${{ secrets.VC_NOTARY_API_KEY_B64 }}
           notary-api-key-id: ${{ secrets.VC_NOTARY_API_KEY_ID }}
           notary-api-issuer: ${{ secrets.VC_NOTARY_API_ISSUER }}
-          notary-apple-id: ${{ secrets.VC_NOTARY_APPLE_ID }}
-          notary-password: ${{ secrets.VC_NOTARY_PASSWORD }}
-          notary-team-id: ${{ secrets.VC_NOTARY_TEAM_ID }}
+          notary-apple-id: ${{ secrets.LOCTREE_NOTARY_APPLE_ID || secrets.VC_NOTARY_APPLE_ID }}
+          notary-password: ${{ secrets.LOCTREE_NOTARY_PASSWORD || secrets.VC_NOTARY_PASSWORD }}
+          notary-team-id: ${{ secrets.LOCTREE_NOTARY_TEAM_ID || secrets.VC_NOTARY_TEAM_ID }}
 
       - name: Create artifact (Unix)
         if: runner.os != 'Windows'
@@ -639,8 +652,8 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_PRIVATE_KEY: ${{ secrets.LOCTREE_GPG_PRIVATE_KEY || secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.LOCTREE_GPG_PASSPHRASE || secrets.GPG_PASSPHRASE }}
         run: |
           test -n "${GPG_PRIVATE_KEY:-}" || {
             echo "GPG_PRIVATE_KEY secret not set" >&2
@@ -755,6 +768,100 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ env.RELEASE_TAG }}" "${{ steps.make-checksum-msi.outputs.checksum_name }}" --repo "${{ github.repository }}"
 
+      - name: Stage Windows no-web artifacts for GPG signing
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dist-windows-noweb-${{ matrix.target }}
+          path: |
+            ${{ steps.make-artifact-windows.outputs.asset_name }}
+            target/wix/vc-frame-no-web-${{ matrix.target }}-installer.msi
+          if-no-files-found: error
+
+  # Sign Windows ZIP/MSI artifacts with the pinned GPG trust root (runs on Linux
+  # after Windows builds; Authenticode / Azure Trusted Signing can wrap PE/MSI
+  # binaries in the Windows legs before archiving when configured).
+  sign-windows-release:
+    needs: [create-release, build-release-normal, build-release-noweb]
+    name: sign-windows-release
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && format('candidate-{0}', github.run_id) || github.ref_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@fa0a91b85d4f4041e017790ed8e50bd4db7168b5 # v4
+        with:
+          pattern: dist-windows-*
+          merge-multiple: true
+          path: win-artifacts
+
+      - name: Sign and verify Windows artifacts (GPG)
+        shell: bash
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.LOCTREE_GPG_PRIVATE_KEY || secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.LOCTREE_GPG_PASSPHRASE || secrets.GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          test -n "${GPG_PRIVATE_KEY:-}" || {
+            echo "LOCTREE_GPG_PRIVATE_KEY or GPG_PRIVATE_KEY secret not set" >&2
+            exit 1
+          }
+          expected_fingerprint="$(
+            sed -n 's/^DEFAULT_GPG_FINGERPRINT="\([A-Fa-f0-9]*\)"/\1/p' \
+              tools/install.sh | tr '[:lower:]' '[:upper:]'
+          )"
+          test -n "$expected_fingerprint" || {
+            echo "tools/install.sh must pin DEFAULT_GPG_FINGERPRINT before signing" >&2
+            exit 1
+          }
+          signing_home="$(mktemp -d)"
+          chmod 700 "$signing_home"
+          trap 'gpgconf --homedir "$signing_home" --kill all 2>/dev/null || true; rm -rf "$signing_home"' EXIT
+          printf '%s\n' "$GPG_PRIVATE_KEY" |
+            gpg --homedir "$signing_home" --batch --import
+          gpg_args=(--homedir "$signing_home" --batch --yes --pinentry-mode loopback)
+          if [ -n "${GPG_PASSPHRASE:-}" ]; then
+            gpg_args+=(--passphrase "$GPG_PASSPHRASE")
+          fi
+          shopt -s nullglob
+          subjects=(win-artifacts/*.zip win-artifacts/*.msi)
+          test "${#subjects[@]}" -eq 4 || {
+            echo "expected 4 Windows release subjects, found ${#subjects[@]}" >&2
+            exit 1
+          }
+          for subject in "${subjects[@]}"; do
+            gpg "${gpg_args[@]}" --local-user "$expected_fingerprint" \
+              --detach-sign --output "${subject}.sig" "$subject"
+            signature_verification="$(
+              gpg --homedir "$signing_home" --batch --status-fd 1 \
+                --verify "${subject}.sig" "$subject"
+            )" || {
+              echo "Windows signature verification failed for $(basename "$subject")" >&2
+              exit 1
+            }
+            signature_primary_fingerprints="$(
+              printf '%s\n' "$signature_verification" |
+                awk '$1 == "[GNUPG:]" && $2 == "VALIDSIG" { print toupper($NF) }'
+            )"
+            test "$signature_primary_fingerprints" = "$expected_fingerprint" || {
+              echo "Windows signature must have exactly one pinned signer: $(basename "$subject")" >&2
+              exit 1
+            }
+          done
+
+      - name: Upload Windows signatures
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ env.RELEASE_TAG }}" win-artifacts/*.sig --repo "${{ github.repository }}"
+
   # ===========================================================================
   # Finalize: publish the signed release manifest + the GPG public key.
   #
@@ -823,11 +930,11 @@ jobs:
       - name: Sign manifest.json
         shell: bash
         env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_PRIVATE_KEY: ${{ secrets.LOCTREE_GPG_PRIVATE_KEY || secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.LOCTREE_GPG_PASSPHRASE || secrets.GPG_PASSPHRASE }}
         run: |
           test -n "${GPG_PRIVATE_KEY:-}" || {
-            echo "GPG_PRIVATE_KEY secret not set" >&2
+            echo "LOCTREE_GPG_PRIVATE_KEY or GPG_PRIVATE_KEY secret not set" >&2
             exit 1
           }
           expected_fingerprint="$(
@@ -867,8 +974,20 @@ jobs:
 
       - name: Write GPG public key
         env:
-          GPG_PUBLIC_KEY: ${{ secrets.GPG_PUBLIC_KEY }}
+          GPG_PUBLIC_KEY: ${{ secrets.LOCTREE_GPG_PUBLIC_KEY || secrets.GPG_PUBLIC_KEY }}
+          GPG_PRIVATE_KEY: ${{ secrets.LOCTREE_GPG_PRIVATE_KEY || secrets.GPG_PRIVATE_KEY }}
         run: |
+          if [ -z "${GPG_PUBLIC_KEY:-}" ] && [ -n "${GPG_PRIVATE_KEY:-}" ]; then
+            expected_fingerprint="$(
+              sed -n 's/^DEFAULT_GPG_FINGERPRINT="\([A-Fa-f0-9]*\)"/\1/p' \
+                tools/install.sh | tr '[:lower:]' '[:upper:]'
+            )"
+            pub_home="$(mktemp -d)"
+            chmod 700 "$pub_home"
+            trap 'gpgconf --homedir "$pub_home" --kill all 2>/dev/null || true; rm -rf "$pub_home"' EXIT
+            printf '%s\n' "$GPG_PRIVATE_KEY" | gpg --homedir "$pub_home" --batch --import
+            GPG_PUBLIC_KEY="$(gpg --homedir "$pub_home" --batch --armor --export "$expected_fingerprint")"
+          fi
           if [ -z "${GPG_PUBLIC_KEY:-}" ]; then
             echo "GPG_PUBLIC_KEY secret not set" >&2
             exit 1
@@ -881,7 +1000,7 @@ jobs:
         run: gh release upload "${{ env.RELEASE_TAG }}" manifest.json manifest.json.sig vc-frame-signing.asc tools/install.sh --repo "${{ github.repository }}"
 
   verify-and-publish:
-    needs: [build-release-normal, build-release-noweb, publish-manifest]
+    needs: [build-release-normal, build-release-noweb, publish-manifest, sign-windows-release]
     name: verify-assets-and-publish
     runs-on: ubuntu-latest
     environment: release
@@ -890,7 +1009,8 @@ jobs:
       attestations: read
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GPG_PUBLIC_KEY: ${{ secrets.GPG_PUBLIC_KEY }}
+      GPG_PUBLIC_KEY: ${{ secrets.LOCTREE_GPG_PUBLIC_KEY || secrets.GPG_PUBLIC_KEY }}
+      GPG_PRIVATE_KEY: ${{ secrets.LOCTREE_GPG_PRIVATE_KEY || secrets.GPG_PRIVATE_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -925,8 +1045,10 @@ jobs:
           vc-frame-aarch64-apple-darwin.tar.gz.sig
           vc-frame-x86_64-pc-windows-msvc.zip
           vc-frame-x86_64-pc-windows-msvc.zip.sha256
+          vc-frame-x86_64-pc-windows-msvc.zip.sig
           vc-frame-x86_64-pc-windows-msvc-installer.msi
           vc-frame-x86_64-pc-windows-msvc-installer.msi.sha256
+          vc-frame-x86_64-pc-windows-msvc-installer.msi.sig
           vc-frame-no-web-x86_64-unknown-linux-musl.tar.gz
           vc-frame-no-web-x86_64-unknown-linux-musl.tar.gz.sha256
           vc-frame-no-web-x86_64-unknown-linux-musl.tar.gz.sig
@@ -941,8 +1063,10 @@ jobs:
           vc-frame-no-web-aarch64-apple-darwin.tar.gz.sig
           vc-frame-no-web-x86_64-pc-windows-msvc.zip
           vc-frame-no-web-x86_64-pc-windows-msvc.zip.sha256
+          vc-frame-no-web-x86_64-pc-windows-msvc.zip.sig
           vc-frame-no-web-x86_64-pc-windows-msvc-installer.msi
           vc-frame-no-web-x86_64-pc-windows-msvc-installer.sha256sum
+          vc-frame-no-web-x86_64-pc-windows-msvc-installer.msi.sig
           "
           asset_contract_dir="$(mktemp -d)"
           trap 'rm -rf "$asset_contract_dir"' EXIT
@@ -996,10 +1120,6 @@ jobs:
           else
             tag="${GITHUB_REF#refs/tags/}"
           fi
-          test -n "${GPG_PUBLIC_KEY:-}" || {
-            echo "GPG_PUBLIC_KEY secret not set" >&2
-            exit 1
-          }
           verification_dir="$(mktemp -d)"
           verify_home="$(mktemp -d)"
           chmod 700 "$verify_home"
@@ -1018,13 +1138,25 @@ jobs:
             --pattern 'vc-frame-signing.asc' \
             --pattern 'install.sh'
 
-          printf '%s\n' "$GPG_PUBLIC_KEY" |
-            gpg --homedir "$verify_home" --batch --import
           expected_fingerprint="$(
             sed -n 's/^DEFAULT_GPG_FINGERPRINT="\([A-Fa-f0-9]*\)"/\1/p' \
               "$verification_dir/install.sh" |
               tr '[:lower:]' '[:upper:]'
           )"
+          if [ -z "${GPG_PUBLIC_KEY:-}" ] && [ -n "${GPG_PRIVATE_KEY:-}" ]; then
+            pub_home="$(mktemp -d)"
+            chmod 700 "$pub_home"
+            printf '%s\n' "$GPG_PRIVATE_KEY" | gpg --homedir "$pub_home" --batch --import
+            GPG_PUBLIC_KEY="$(gpg --homedir "$pub_home" --batch --armor --export "$expected_fingerprint")"
+            gpgconf --homedir "$pub_home" --kill all 2>/dev/null || true
+            rm -rf "$pub_home"
+          fi
+          test -n "${GPG_PUBLIC_KEY:-}" || {
+            echo "GPG_PUBLIC_KEY secret not set" >&2
+            exit 1
+          }
+          printf '%s\n' "$GPG_PUBLIC_KEY" |
+            gpg --homedir "$verify_home" --batch --import
           secret_primary_fingerprints="$(
             printf '%s\n' "$GPG_PUBLIC_KEY" |
               gpg --homedir "$verify_home" --batch --with-colons \
@@ -1072,7 +1204,7 @@ jobs:
           signatures=("$verification_dir"/*.sig)
           test "${#subjects[@]}" -eq 12
           test "${#checksums[@]}" -eq 12
-          test "${#signatures[@]}" -eq 9
+          test "${#signatures[@]}" -eq 13
           for checksum in "${checksums[@]}"; do
             (
               cd "$verification_dir"

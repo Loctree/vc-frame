@@ -1090,7 +1090,7 @@ pub enum ScreenInstruction {
         pane_id: zellij_utils::data::PaneId,
     },
     DesktopNotificationResponse(Vec<u8>, ClientId),
-    PluginSubscribedToAnsiPaneContents(bool), // true = at least one plugin needs ANSI content
+    PluginSubscribedToPaneContents(bool, bool), // (plain, ansi) — any running plugin subscribed
     UpdateBackgroundPluginSubscriptions(PluginId, ClientId, HashSet<EventType>),
     RegisterPluginProjectors {
         transaction_id: LayoutTransactionId,
@@ -1707,8 +1707,8 @@ impl From<&ScreenInstruction> for ScreenContext {
             ScreenInstruction::NotifyPaneClosedToSubscribers { .. } => {
                 ScreenContext::NotifyPaneClosedToSubscribers
             },
-            ScreenInstruction::PluginSubscribedToAnsiPaneContents(..) => {
-                ScreenContext::PluginSubscribedToAnsiPaneContents
+            ScreenInstruction::PluginSubscribedToPaneContents(..) => {
+                ScreenContext::PluginSubscribedToPaneContents
             },
             ScreenInstruction::UpdateBackgroundPluginSubscriptions(..) => {
                 ScreenContext::UpdateBackgroundPluginSubscriptions
@@ -2020,6 +2020,7 @@ pub(crate) struct Screen {
     cached_layouts: Vec<LayoutInfo>,
     cached_layout_errors: Vec<LayoutWithError>,
     pane_render_subscribers: HashMap<ClientId, PaneRenderSubscription>,
+    plugins_need_pane_contents: bool,
     plugins_need_ansi_pane_contents: bool,
     background_plugin_subscriptions: HashMap<(PluginId, ClientId), HashSet<EventType>>,
     /// Chrome plugin/client targets that were told they are visible by the
@@ -3866,6 +3867,7 @@ impl Screen {
             cached_layouts: vec![],
             cached_layout_errors: vec![],
             pane_render_subscribers: HashMap::new(),
+            plugins_need_pane_contents: false,
             plugins_need_ansi_pane_contents: false,
             background_plugin_subscriptions: HashMap::new(),
             last_visible_chrome_targets: BTreeSet::new(),
@@ -6644,7 +6646,11 @@ impl Screen {
                 self.osc8_hyperlinks,
             );
 
+            // A CLI subscriber, ANSI or not, is served from the plain pane map
+            // (deliver_to_pane_subscribers_from_report); ANSI adds a second map.
+            let has_cli_subscribers = !self.pane_render_subscribers.is_empty();
             let has_ansi_subscribers = self.pane_render_subscribers.values().any(|s| s.ansi);
+            output.collect_pane_contents = has_cli_subscribers || self.plugins_need_pane_contents;
             output.collect_ansi_pane_contents =
                 has_ansi_subscribers || self.plugins_need_ansi_pane_contents;
 
@@ -6667,10 +6673,12 @@ impl Screen {
                 self.deliver_to_pane_subscribers_from_report(&pane_render_report);
             }
 
-            let _ = self
-                .bus
-                .senders
-                .send_to_plugin(PluginInstruction::PaneRenderReport(pane_render_report));
+            if self.plugins_need_pane_contents || self.plugins_need_ansi_pane_contents {
+                let _ = self
+                    .bus
+                    .senders
+                    .send_to_plugin(PluginInstruction::PaneRenderReport(pane_render_report));
+            }
 
             non_watcher_output_was_dirty = output.is_dirty();
 
@@ -17845,8 +17853,9 @@ pub(crate) fn screen_thread_main(params: ScreenThreadParams) -> Result<()> {
                 }
                 screen.notify_pane_closed_to_subscribers(pane_id);
             },
-            ScreenInstruction::PluginSubscribedToAnsiPaneContents(has_subscribers) => {
-                screen.plugins_need_ansi_pane_contents = has_subscribers;
+            ScreenInstruction::PluginSubscribedToPaneContents(needs_plain, needs_ansi) => {
+                screen.plugins_need_pane_contents = needs_plain;
+                screen.plugins_need_ansi_pane_contents = needs_ansi;
             },
             ScreenInstruction::UpdateBackgroundPluginSubscriptions(
                 plugin_id,
