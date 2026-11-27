@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
+## [Unreleased]
+
+## [4.6.1] - 2026-11-27
+
+- Admit an unbundled Darwin Runtime Pack. Vibecrafted 4.6.0 ships its macOS Runtime Pack without a Frame engine and delegates `bin/vc-frame` to this product; 4.6.0 compared the running engine with that wrapper and refused every project with "this Frame engine does not belong to the selected Runtime Pack". The engine is now resolved through the runtime's own `external_products.py frame`, with the same physical-path checks.
+- Read configuration from `~/.config/vibecrafted/vc-frame` before the legacy path.
+- Serve every CLI subscriber from the plain pane map, and collect it only when a subscriber exists.
+- Project open no longer doubles its "Project could not be opened: " prefix.
+- The release workflow falls back to the Loctree organisation's signing secrets.
+- main carries the 4.6.0 release line again: v4.6.0 was tagged from `release/v4.6.0`, which had not returned to `main`. The installer default now matches the release (it still said 4.5.1).
+
 ## [4.6.0] - 2026-11-20
 
 - vc-frame is released as its own product on its own SemVer. Vibecrafted 4.6.0 requires an installed vc-frame `>=4.5.1,<5.0.0` on PATH and no longer builds Frame into its runtime; its source pin must name a Frame inside that range.
