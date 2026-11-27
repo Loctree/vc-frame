@@ -1730,6 +1730,7 @@ impl TryFrom<ProtobufPaneInfo> for PaneInfo {
             is_floating: protobuf_pane_info.is_floating,
             is_suppressed: protobuf_pane_info.is_suppressed,
             is_pinned: protobuf_pane_info.is_pinned,
+            has_output_activity: protobuf_pane_info.has_output_activity,
             title: protobuf_pane_info.title,
             exited: protobuf_pane_info.exited,
             exit_status: protobuf_pane_info.exit_status,
@@ -1803,6 +1804,7 @@ impl TryFrom<PaneInfo> for ProtobufPaneInfo {
             is_floating: pane_info.is_floating,
             is_suppressed: pane_info.is_suppressed,
             is_pinned: pane_info.is_pinned,
+            has_output_activity: pane_info.has_output_activity,
             title: pane_info.title,
             exited: pane_info.exited,
             exit_status: pane_info.exit_status,
@@ -2848,6 +2850,7 @@ fn serialize_session_update_event_with_non_default_values() {
             default_bg: None,
             panel_scope: None,
             is_pinned: false,
+            has_output_activity: false,
         },
         PaneInfo {
             id: 1,
@@ -2877,6 +2880,7 @@ fn serialize_session_update_event_with_non_default_values() {
             default_bg: None,
             panel_scope: Some(PanelScope::Project("workspace-a".to_owned())),
             is_pinned: false,
+            has_output_activity: false,
         },
     ];
     panes.insert(0, panes_list);

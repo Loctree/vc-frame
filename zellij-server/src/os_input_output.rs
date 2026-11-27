@@ -32,6 +32,7 @@ use std::{
     path::PathBuf,
     process::Command,
     sync::{Arc, Condvar, Mutex},
+    time::{Duration, Instant},
 };
 
 // this is a utility method to separate the arguments from a pathbuf before we turn it into a
@@ -661,11 +662,20 @@ fn foreground_process_group_of_terminal_leader(pid: u32) -> Option<u32> {
 type CachedResizes = Arc<Mutex<Option<BTreeMap<u32, (u16, u16, Option<u16>, Option<u16>)>>>>;
 pub(crate) type ResyncRenderNotify = Arc<dyn Fn() + Send + Sync>;
 
+/// Quiet time after a terminal's last size change before its foreground
+/// process group gets SIGWINCH once more. Some TUIs (agy on bubbletea v2
+/// among them) can drop the last signal of a resize burst, such as the steps
+/// of a host font zoom, and keep a stale width; their diff renderer then
+/// leaves the cells of the wider frame behind in the narrower pane.
+pub(crate) const RESIZE_SETTLE: Duration = Duration::from_millis(150);
+
 #[derive(Clone)]
 pub struct ServerOsInputOutput {
     pty_backend: PtyBackendImpl,
     client_senders: Arc<Mutex<HashMap<ClientId, ClientSender>>>,
     cached_resizes: CachedResizes,
+    /// When each terminal's size last changed, until it settles.
+    settling_resizes: Arc<Mutex<BTreeMap<u32, Instant>>>,
     display_resync: Arc<Mutex<HashSet<ClientId>>>,
     resync_render: Arc<Mutex<Option<ResyncRenderNotify>>>,
 }
@@ -783,6 +793,12 @@ pub trait ServerOsApi: Send + Sync {
     fn clear_terminal_id(&self, terminal_id: u32) -> Result<()>;
     fn cache_resizes(&mut self) {}
     fn apply_cached_resizes(&mut self) {}
+    /// Signal, once more, every terminal whose size has not changed for
+    /// [`RESIZE_SETTLE`], and return how long until the next one settles.
+    /// Default none so test fakes stay unchanged.
+    fn redeliver_settled_resizes(&self) -> Option<Duration> {
+        None
+    }
     /// True after a display delta was dropped or evicted so Screen can emit
     /// CSI-2J + force-render. Default empty so test fakes stay unchanged.
     fn display_resync_pending(&self) -> bool {
@@ -811,7 +827,29 @@ impl ServerOsApi for ServerOsInputOutput {
             return Ok(());
         }
         self.pty_backend
-            .set_terminal_size(id, cols, rows, width_in_pixels, height_in_pixels)
+            .set_terminal_size(id, cols, rows, width_in_pixels, height_in_pixels)?;
+        self.settling_resizes
+            .lock()
+            .unwrap()
+            .insert(id, Instant::now());
+        Ok(())
+    }
+    fn redeliver_settled_resizes(&self) -> Option<Duration> {
+        let now = Instant::now();
+        let mut settling = self.settling_resizes.lock().unwrap();
+        settling.retain(|terminal_id, changed_at| {
+            let settled = now.saturating_duration_since(*changed_at) >= RESIZE_SETTLE;
+            if settled {
+                self.pty_backend.redeliver_window_change(*terminal_id);
+            }
+            !settled
+        });
+        settling
+            .values()
+            .map(|changed_at| {
+                RESIZE_SETTLE.saturating_sub(now.saturating_duration_since(*changed_at))
+            })
+            .min()
     }
     fn spawn_terminal(
         &self,
@@ -1088,7 +1126,18 @@ impl ServerOsApi for ServerOsInputOutput {
         let err_context = || "failed to write to file".to_string();
 
         let mut f: File = match name {
-            Some(x) => File::create(x).with_context(err_context)?,
+            Some(x) => {
+                let mut options = std::fs::OpenOptions::new();
+                options.write(true).create(true).truncate(true);
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::OpenOptionsExt;
+                    // New history dumps are private from creation, regardless of umask.
+                    // An explicitly selected existing export keeps its permissions.
+                    options.mode(0o600);
+                }
+                options.open(x).with_context(err_context)?
+            },
             None => tempfile().with_context(err_context)?,
         };
         write!(f, "{}", buf).with_context(err_context)
@@ -1256,6 +1305,7 @@ pub fn get_server_os_input() -> Result<ServerOsInputOutput, std::io::Error> {
         pty_backend: PtyBackendImpl::new()?,
         client_senders: Arc::new(Mutex::new(HashMap::new())),
         cached_resizes: Arc::new(Mutex::new(None)),
+        settling_resizes: Arc::new(Mutex::new(BTreeMap::new())),
         display_resync: Arc::new(Mutex::new(HashSet::new())),
         resync_render: Arc::new(Mutex::new(None)),
     })

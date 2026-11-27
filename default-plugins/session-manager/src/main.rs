@@ -543,6 +543,9 @@ struct State {
     agent_runs: Option<Vec<AgentRunUiInfo>>,
     // Explicit role marker: this session is Operator Frame, an ordinary peer.
     frame_host: bool,
+    // Read-only projection of the session's immutable authorized environment.
+    // Resolve once per load, never through a full snapshot RPC on each action.
+    product_context: bool,
     // Compatibility marker for layouts that keep a rail resident in each tab.
     // Session activation always uses native peer routing.
     host_mirror: bool,
@@ -603,6 +606,7 @@ register_plugin!(State);
 
 impl ZellijPlugin for State {
     fn load(&mut self, configuration: BTreeMap<String, String>) {
+        self.product_context = project_open::has_product_context();
         self.workspace_surface =
             configuration.get("workspace_surface").map(String::as_str) == Some("true");
         if self.workspace_surface {
@@ -2403,7 +2407,7 @@ impl State {
     }
 
     fn open_project_from_folder(&mut self, folder: std::path::PathBuf) {
-        if project_open::has_product_context() {
+        if self.product_context {
             self.prepare_project(folder, None, None);
             return;
         }
@@ -3963,7 +3967,7 @@ impl State {
     fn handle_selection(&mut self) {
         match self.active_screen {
             ActiveScreen::NewSession => {
-                if project_open::has_product_context()
+                if self.product_context
                     && !self.new_session_info.entering_new_session_name()
                     && let Some(folder) = self.new_session_info.new_session_folder.clone()
                 {
@@ -4186,7 +4190,7 @@ impl State {
                         };
                         let layout = self.single_screen_state.layout_list.selected_layout_info();
                         let cwd = self.single_screen_state.new_session_folder.clone();
-                        if project_open::has_product_context()
+                        if self.product_context
                             && let Some(folder) = cwd.clone()
                         {
                             self.prepare_project(
@@ -4281,7 +4285,7 @@ impl State {
     }
 
     fn apply_new_workspace_plan(&mut self, plan: NewWorkspacePlan) {
-        if project_open::has_product_context() {
+        if self.product_context {
             match &plan {
                 NewWorkspacePlan::CreateGuestWorkspace {
                     name,
@@ -5615,6 +5619,43 @@ mod rail_tests {
         assert_eq!(
             format_process_tab_rail_entry(&tab, RailWidthMode::Wide),
             "   ◉ claude"
+        );
+    }
+
+    #[test]
+    fn rail_announces_observed_output_without_a_title_frame() {
+        let quiet = TabUiInfo::for_rail_test("Shell", false, "cargo", 1);
+        let printing = TabUiInfo::for_rail_test("Shell", false, "cargo", 1).with_output_activity();
+
+        assert_eq!(
+            format_process_tab_rail_entry(&quiet, RailWidthMode::Wide),
+            "   ○ Shell · cargo"
+        );
+        assert_eq!(
+            format_process_tab_rail_entry(&printing, RailWidthMode::Wide),
+            "   ○ ⠿ Shell · cargo"
+        );
+        assert_eq!(
+            format_process_tab_rail_entry(&printing, RailWidthMode::Dense),
+            "   ○⠿"
+        );
+        // A producer label without a frame (a provider that never animates
+        // its title) cannot withdraw what the server observed.
+        assert_eq!(
+            format_process_tab_rail_entry_with_label(
+                &printing,
+                RailWidthMode::Wide,
+                "claude",
+                Some(("claude", None)),
+            ),
+            "   ○ ⠿ claude"
+        );
+        // Attention still outranks activity.
+        let mut ringing = printing.clone();
+        ringing.has_bell_notification = true;
+        assert_eq!(
+            format_process_tab_rail_entry(&ringing, RailWidthMode::Wide),
+            "   ○ [!] Shell · cargo"
         );
     }
 

@@ -724,6 +724,29 @@ impl UnixPtyBackend {
         Ok(())
     }
 
+    /// Tell the terminal's foreground process group, once more, that its
+    /// window size changed. The kernel raises SIGWINCH only when TIOCSWINSZ
+    /// changes the size, so a program that lost the last signal of a resize
+    /// burst keeps laying out for a width the pane no longer has; repeating
+    /// the size would not reach it.
+    pub fn redeliver_window_change(&self, terminal_id: u32) {
+        let fd = match self.terminal_id_to_raw_fd.lock() {
+            Ok(fds) => fds.get(&terminal_id).copied().flatten(),
+            Err(_) => None,
+        };
+        let Some(fd) = fd else {
+            return;
+        };
+        // SAFETY: `fd` is this terminal's open primary side; tcgetpgrp and
+        // killpg only read it and signal the group it names.
+        unsafe {
+            let foreground = libc::tcgetpgrp(fd);
+            if foreground > 0 {
+                libc::killpg(foreground, libc::SIGWINCH);
+            }
+        }
+    }
+
     pub fn write_to_tty_stdin(&self, terminal_id: u32, buf: &[u8]) -> Result<usize> {
         let err_context = || format!("failed to write to stdin of TTY ID {}", terminal_id);
 

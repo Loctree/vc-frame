@@ -53,19 +53,26 @@ struct PendingWrite {
 pub(crate) fn pty_writer_main(bus: Bus<PtyWriteInstruction>) -> Result<()> {
     let err_context = || "failed to write to pty".to_string();
     let mut pending: HashMap<u32, VecDeque<PendingWrite>> = HashMap::new();
+    // Time until the next resized terminal settles and is signalled again.
+    let mut next_settle: Option<Duration> = None;
 
     loop {
         // If we have pending writes, use a short timeout so we can keep
-        // draining. Otherwise, block until a new instruction arrives.
+        // draining; a settling resize wakes the loop when it is due.
+        // Otherwise, block until a new instruction arrives.
         let has_pending = pending.values().any(|q| !q.is_empty());
-        let event = if has_pending {
-            match bus.recv_timeout(PENDING_DRAIN_TIMEOUT) {
+        let wait = match (has_pending, next_settle) {
+            (true, Some(settle)) => Some(settle.min(PENDING_DRAIN_TIMEOUT)),
+            (true, None) => Some(PENDING_DRAIN_TIMEOUT),
+            (false, settle) => settle,
+        };
+        let event = match wait {
+            Some(timeout) => match bus.recv_timeout(timeout) {
                 Ok(pair) => Some(pair),
                 Err(channels::RecvTimeoutError::Timeout) => None,
                 Err(channels::RecvTimeoutError::Disconnected) => return Ok(()),
-            }
-        } else {
-            Some(bus.recv().with_context(err_context)?)
+            },
+            None => Some(bus.recv().with_context(err_context)?),
         };
 
         let mut os_input = bus
@@ -174,6 +181,7 @@ pub(crate) fn pty_writer_main(bus: Bus<PtyWriteInstruction>) -> Result<()> {
             }
         }
         pending.retain(|_, q| !q.is_empty());
+        next_settle = os_input.redeliver_settled_resizes();
     }
 }
 
