@@ -30,6 +30,28 @@ system:
 The `session-rail` plugin alias in `zellij-utils/assets/config/default.kdl`
 points at `zellij:session-manager` with `rail true`.
 
+### Rail status slot
+
+Each tab row carries one status cell between the focus chip (`◉`/`○`) and the
+tab name. It reads native facts of the tab's terminals, in this order:
+
+| Cell      | Fact                                                        |
+| --------- | ----------------------------------------------------------- |
+| `[!]`     | a terminal rang the bell                                    |
+| `⚠`       | a terminal exited with a non-zero or unknown status         |
+| `Ⅱ`       | a terminal is held after its command ended                  |
+| `⠿`/frame | a terminal is active: it is printing, or its title animates |
+| _(empty)_ | nothing to report                                           |
+
+"Printing" is observed by the server, not announced by the program: a terminal
+whose pty keeps delivering output for about 1.5 seconds is published with
+`has_output_activity` (in `PaneUpdate`, `list-panes --json` and the session
+metadata other sessions read), and withdrawn about 3 seconds after it goes
+quiet. A single redraw, a keystroke echo or a dashboard that repaints once a
+second is not activity. Builds, test runs and agents that never animate their
+title are therefore visible in the rail of every session, not only programs
+that put a spinner frame in the terminal title.
+
 The operator entrypoint layout (`vibecrafted`) replaces the top `tab-bar` with
 the redesigned `compact-bar`: brand chip, inverted mode chip, fisheye tab
 ribbons, the Quick cmd chip (`Shift+Cmd+.`), and the Command Composer chip (`Cmd+E`). Zones

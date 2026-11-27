@@ -543,6 +543,9 @@ struct State {
     agent_runs: Option<Vec<AgentRunUiInfo>>,
     // Explicit role marker: this session is Operator Frame, an ordinary peer.
     frame_host: bool,
+    // Read-only projection of the session's immutable authorized environment.
+    // Resolve once per load, never through a full snapshot RPC on each action.
+    product_context: bool,
     // Compatibility marker for layouts that keep a rail resident in each tab.
     // Session activation always uses native peer routing.
     host_mirror: bool,
@@ -603,6 +606,7 @@ register_plugin!(State);
 
 impl ZellijPlugin for State {
     fn load(&mut self, configuration: BTreeMap<String, String>) {
+        self.product_context = project_open::has_product_context();
         self.workspace_surface =
             configuration.get("workspace_surface").map(String::as_str) == Some("true");
         if self.workspace_surface {
@@ -1600,6 +1604,21 @@ fn open_project_plan(
     )
 }
 
+/// The rail's hover. Off the current-session block the hovered row takes the
+/// block tint, as it always has. On the block the tint is already there, so a
+/// tint alone would make the cursor vanish exactly where the user works: the
+/// hovered row lights its whole line in the accent instead, dim chrome
+/// included, which no resting row ever does.
+fn rail_hover_text(fitted: &str, styled: Text, on_block_tint: bool) -> Text {
+    if on_block_tint {
+        Text::new(fitted)
+            .selected()
+            .color_range(1, 0..fitted.chars().count())
+    } else {
+        styled.selected()
+    }
+}
+
 /// Resolve hover highlight for a plugin-relative mouse line.
 /// Missing map key / negative line → clear (no sticky highlight on chrome gaps).
 fn rail_hover_target(line: isize, click_map: &BTreeMap<usize, RailClickTarget>) -> Option<usize> {
@@ -2403,7 +2422,7 @@ impl State {
     }
 
     fn open_project_from_folder(&mut self, folder: std::path::PathBuf) {
-        if project_open::has_product_context() {
+        if self.product_context {
             self.prepare_project(folder, None, None);
             return;
         }
@@ -2744,6 +2763,8 @@ impl State {
             };
             let fitted_chars = fitted.chars().count();
             let mut text = Text::new(fitted.clone());
+            // Rows already on the block tint need a hover of their own.
+            let mut on_block_tint = false;
             match rail_row.kind {
                 SessionRailRowKind::HostTitle => {
                     if mode != RailWidthMode::Dense {
@@ -2754,6 +2775,7 @@ impl State {
                 SessionRailRowKind::Host(host_row) => {
                     if self.selected_host_row == Some(host_row) {
                         text = text.selected();
+                        on_block_tint = true;
                     }
                 },
                 SessionRailRowKind::Separator => {
@@ -2792,6 +2814,7 @@ impl State {
                     // highlight bed — this header row opens it.
                     if is_current || selected_index == Some(session_index) {
                         text = text.selected();
+                        on_block_tint = true;
                     }
                 },
                 SessionRailRowKind::LiveProcess { session_index, .. } => {
@@ -2827,6 +2850,7 @@ impl State {
                     // so the whole "you are here" region reads as one shape.
                     if in_current_session {
                         text = text.selected();
+                        on_block_tint = true;
                     }
                 },
                 SessionRailRowKind::OpenProject => {
@@ -2837,7 +2861,7 @@ impl State {
             }
             // OS hover: same highlight language for sessions, live tabs, drawers.
             if self.rail_hover_row == Some(row) {
-                text = text.selected();
+                text = rail_hover_text(&fitted, text, on_block_tint);
             }
             // Every data row is clickable; header (row 0) never enters the map.
             let target = rail_row_click_target(&rail_row.kind);
@@ -3963,7 +3987,7 @@ impl State {
     fn handle_selection(&mut self) {
         match self.active_screen {
             ActiveScreen::NewSession => {
-                if project_open::has_product_context()
+                if self.product_context
                     && !self.new_session_info.entering_new_session_name()
                     && let Some(folder) = self.new_session_info.new_session_folder.clone()
                 {
@@ -4186,7 +4210,7 @@ impl State {
                         };
                         let layout = self.single_screen_state.layout_list.selected_layout_info();
                         let cwd = self.single_screen_state.new_session_folder.clone();
-                        if project_open::has_product_context()
+                        if self.product_context
                             && let Some(folder) = cwd.clone()
                         {
                             self.prepare_project(
@@ -4281,7 +4305,7 @@ impl State {
     }
 
     fn apply_new_workspace_plan(&mut self, plan: NewWorkspacePlan) {
-        if project_open::has_product_context() {
+        if self.product_context {
             match &plan {
                 NewWorkspacePlan::CreateGuestWorkspace {
                     name,
@@ -5615,6 +5639,43 @@ mod rail_tests {
         assert_eq!(
             format_process_tab_rail_entry(&tab, RailWidthMode::Wide),
             "   ◉ claude"
+        );
+    }
+
+    #[test]
+    fn rail_announces_observed_output_without_a_title_frame() {
+        let quiet = TabUiInfo::for_rail_test("Shell", false, "cargo", 1);
+        let printing = TabUiInfo::for_rail_test("Shell", false, "cargo", 1).with_output_activity();
+
+        assert_eq!(
+            format_process_tab_rail_entry(&quiet, RailWidthMode::Wide),
+            "   ○ Shell · cargo"
+        );
+        assert_eq!(
+            format_process_tab_rail_entry(&printing, RailWidthMode::Wide),
+            "   ○ ⠿ Shell · cargo"
+        );
+        assert_eq!(
+            format_process_tab_rail_entry(&printing, RailWidthMode::Dense),
+            "   ○⠿"
+        );
+        // A producer label without a frame (a provider that never animates
+        // its title) cannot withdraw what the server observed.
+        assert_eq!(
+            format_process_tab_rail_entry_with_label(
+                &printing,
+                RailWidthMode::Wide,
+                "claude",
+                Some(("claude", None)),
+            ),
+            "   ○ ⠿ claude"
+        );
+        // Attention still outranks activity.
+        let mut ringing = printing.clone();
+        ringing.has_bell_notification = true;
+        assert_eq!(
+            format_process_tab_rail_entry(&ringing, RailWidthMode::Wide),
+            "   ○ [!] Shell · cargo"
         );
     }
 
@@ -7430,6 +7491,32 @@ mod rail_tests {
         assert_eq!(rail_hover_target(-1, &click_map), None);
     }
 
+    #[test]
+    fn rail_hover_stays_visible_on_the_current_session_block() {
+        let fitted = "   ○ codex · Read private";
+        let width = fitted.chars().count();
+        let resting_on_block = Text::new(fitted).color_range(2, 3..4).selected();
+
+        // On the block the tint is already there: the hovered row must not
+        // look like its resting self, and it lights the whole line.
+        let hovered = rail_hover_text(fitted, resting_on_block.clone(), true);
+        assert_ne!(format!("{hovered:?}"), format!("{resting_on_block:?}"));
+        assert_eq!(
+            format!("{hovered:?}"),
+            format!(
+                "{:?}",
+                Text::new(fitted).selected().color_range(1, 0..width)
+            )
+        );
+
+        // Off the block the hover keeps its tint and the row's own styling.
+        let resting_off_block = Text::new(fitted).color_range(2, 3..4);
+        let hovered = rail_hover_text(fitted, resting_off_block.clone(), false);
+        assert_eq!(
+            format!("{hovered:?}"),
+            format!("{:?}", resting_off_block.selected())
+        );
+    }
     #[test]
     fn char_offset_of_speaks_chars_not_bytes() {
         // "   ◉ tab · cmd" — the dot separator sits after multi-byte `◉`.

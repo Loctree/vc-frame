@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [4.6.1] - 2026-11-27
+
+- Admit an unbundled Darwin Runtime Pack. Vibecrafted 4.6.0 ships its macOS Runtime Pack without a Frame engine and delegates `bin/vc-frame` to this product; 4.6.0 compared the running engine with that wrapper and refused every project with "this Frame engine does not belong to the selected Runtime Pack". The engine is now resolved through the runtime's own `external_products.py frame`, with the same physical-path checks.
+- Read configuration from `~/.config/vibecrafted/vc-frame` before the legacy path.
+- Serve every CLI subscriber from the plain pane map, and collect it only when a subscriber exists.
+- Project open no longer doubles its "Project could not be opened: " prefix.
+- The release workflow falls back to the Loctree organisation's signing secrets.
+- The `monochrome` fallback theme keeps the THEMES_GUIDE roles: `emphasis_1` (the "you are here" accent) is now brighter than ink and `emphasis_2` (dim chrome) quieter. Before, the accent was the dimmest ink on the line, so the rail's current session and active tab read darker than every other row. A test now holds the fallback theme to that contract. The fallback also stands on the product's galaxy black ground (#0b0b12, block tint 38,38,48) instead of the stock #121212.
+- Hover stays visible inside the current-session block. The block already sits on the hover tint, so a hovered row there lights its whole line in the accent instead.
+- Pin the release trust root: `tools/install.sh` now names the Loctree Release key (`8868139E8A9A2291D067135FB979B60C7079E4D4`, release@loct.io), the key the Loctree organisation signs aicx with. The release workflow refused to run with the empty pin ("must pin DEFAULT_GPG_FINGERPRINT before release"), and the installer verifies the signed manifest against it.
+- main carries the 4.6.0 release line again: v4.6.0 was tagged from `release/v4.6.0`, which had not returned to `main`. The installer default now matches the release (it still said 4.5.1).
+
+## [4.6.0] - 2026-11-20
+
+- vc-frame is released as its own product on its own SemVer. Vibecrafted 4.6.0 requires an installed vc-frame `>=4.5.1,<5.0.0` on PATH and no longer builds Frame into its runtime; its source pin must name a Frame inside that range.
+- Sign standalone macOS full/no-web releases for Apple silicon and Intel with Developer ID and hardened runtime; require accepted Apple notarization before archiving. Disposable CI keychains use the existing `VC_CERT_*` / `VC_NOTARY_*` secret conventions.
+- Add `scripts/sign-darwin.sh` for maintainer builds, selecting Developer ID when available and ad-hoc otherwise. Local Darwin packages sign before their archive and receipt hashes are created, without notarizing or publishing.
+- Document standalone macOS installation and independent Cargo-owned vc-frame SemVer; existing tags and bundled runtime coupling remain unchanged.
+- Signal a pane's foreground process group with SIGWINCH once more 150 ms after its size stops changing. A program that drops the last signal of a resize burst, such as a host font zoom, otherwise keeps laying out for the old width; the kernel does not signal a repeated size by itself.
+
+## [4.5.4] - 2026-11-18
+
+- Align the Frame workspace and local dependency versions with Vibecrafted 4.5.4. Vibecrafted now refuses a Frame pin whose version differs from its own.
+- Keep the new-tab control and active tab visible when the tab strip is crowded.
+- Show producer activity and attention state in the session rail, while rejecting stale identities.
+- Show every terminal that is printing in the session rail, in all sessions. The server observes sustained pane output and publishes it as `has_output_activity`; the rail no longer depends on a program animating its terminal title.
+
 ## [4.5.1] - 2026-11-03
 
 - Restore standalone multi-platform GitHub Release packaging (`vc-frame` Linux, macOS, and Windows archives/MSI plus signed `manifest.json` and `install.sh`) in mutualism with `Vibecrafted.app` (`make release` and `make release-binary` donor targets remain first-class while `Vibecrafted.app` owns its desktop bundle and DMG).

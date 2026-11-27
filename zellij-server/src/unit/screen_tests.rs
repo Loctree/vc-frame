@@ -2895,6 +2895,45 @@ fn open_new_tab() {
     );
 }
 
+#[test]
+fn published_pane_infos_carry_the_output_activity_screen_observed() {
+    let size = Size {
+        cols: 121,
+        rows: 20,
+    };
+    let mut screen = create_new_screen(size, true, true);
+    new_tab(&mut screen, 1, 0);
+    new_tab(&mut screen, 2, 1);
+    let published = |screen: &Screen, terminal_id: u32| -> bool {
+        screen
+            .tabs
+            .values()
+            .flat_map(|tab| screen.published_pane_infos(tab))
+            .find(|pane| !pane.is_plugin && pane.id == terminal_id)
+            .map(|pane| pane.has_output_activity)
+            .expect("the terminal is published")
+    };
+    assert!(!published(&screen, 1), "a new terminal is quiet");
+
+    // Terminal 1 prints for two seconds; terminal 2 prints once.
+    let start = std::time::Instant::now();
+    for step in 0..=20 {
+        screen
+            .output_activity
+            .note_output(1, start + std::time::Duration::from_millis(step * 100));
+    }
+    screen.output_activity.note_output(2, start);
+    assert!(
+        screen
+            .output_activity
+            .refresh(start + std::time::Duration::from_millis(2100)),
+        "the tick reports a change, which republishes pane state"
+    );
+
+    assert!(published(&screen, 1));
+    assert!(!published(&screen, 2));
+}
+
 /// Creates a named tab with an explicit placement, mirroring `new_tab` above.
 fn new_named_tab_with_placement(
     screen: &mut Screen,
@@ -20079,4 +20118,64 @@ mod isolated_activation {
                 .all(|i| !i.is_suppressed)
         );
     }
+}
+
+/// 2026-11-23: a 4.5.4 server at 130% CPU spent its screen thread copying every
+/// pane's viewport and its wasm thread diffing them, with no plugin and no CLI
+/// subscriber asking. Plain contents are collected and reported only on demand.
+#[test]
+fn plain_pane_contents_are_collected_and_reported_only_for_a_subscriber() {
+    let mut screen = create_new_screen(
+        Size {
+            cols: 120,
+            rows: 24,
+        },
+        true,
+        true,
+    );
+    let (to_plugin, plugin_receiver): ChannelWithContext<PluginInstruction> = channels::unbounded();
+    screen.bus.senders.to_plugin = Some(SenderWithContext::new(to_plugin));
+    screen.connected_clients.borrow_mut().insert(1, false);
+    new_tab(&mut screen, 1, 0);
+    let reports = |receiver: &Receiver<(PluginInstruction, ErrorContext)>| {
+        receiver
+            .try_iter()
+            .filter_map(|(instruction, _)| match instruction {
+                PluginInstruction::PaneRenderReport(report) => Some(report),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    plugin_receiver.try_iter().for_each(drop);
+
+    screen.render_to_clients(&HashSet::new()).unwrap();
+    assert!(
+        reports(&plugin_receiver).is_empty(),
+        "no subscriber: no pane render report reaches the plugin thread"
+    );
+
+    screen.plugins_need_pane_contents = true;
+    screen.render_to_clients(&HashSet::new()).unwrap();
+    let delivered = reports(&plugin_receiver);
+    assert!(
+        delivered
+            .iter()
+            .any(|report| !report.all_pane_contents.is_empty()),
+        "a plain subscriber gets the panes' contents"
+    );
+
+    screen.plugins_need_pane_contents = false;
+    screen.plugins_need_ansi_pane_contents = true;
+    screen.render_to_clients(&HashSet::new()).unwrap();
+    let ansi_only = reports(&plugin_receiver);
+    assert!(
+        !ansi_only.is_empty(),
+        "an ANSI subscriber still gets the report"
+    );
+    assert!(
+        ansi_only
+            .iter()
+            .all(|report| report.all_pane_contents.is_empty()),
+        "an ANSI-only subscriber does not pay for plain contents"
+    );
 }

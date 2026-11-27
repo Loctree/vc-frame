@@ -69,6 +69,12 @@ and the current-session **block tint** (the whole block of the session you
 are in, header plus its process rows). Emphasis slots mirror
 `text_unselected` so accents survive selection.
 
+A row already on the block tint cannot show hover with the same tint, so
+there the hovered row lights its whole line in `emphasis_1` instead, dim
+chrome included. No resting row does that, so the cursor stays visible
+inside the block. This works only if the theme keeps the roles above:
+`emphasis_1` clearly brighter than `base`, `emphasis_2` clearly quieter.
+
 ### `ribbon_selected` — "this is armed / this is where you are"
 
 `background`/`base` paint the armed-mode chip (PANE, TAB, SESSION, …), the

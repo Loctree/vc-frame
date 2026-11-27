@@ -6350,3 +6350,121 @@ fn forensic_full_line_erase_replaces_inherited_scroll_background() {
         );
     }
 }
+
+#[test]
+fn sync_output_2026_unlock_marks_grid_for_rerender_and_reports_state() {
+    let mut parser = vte::Parser::new();
+    let mut grid = new_grid_for_forwarding_test();
+    let style = Style::default();
+
+    for byte in b"\x1b[?2026hHello" {
+        parser.advance(&mut grid, *byte);
+    }
+    assert!(grid.is_mid_frame());
+    assert!(grid.render(0, 0, &style).unwrap().is_none());
+
+    // DECRQM while 2026 is active reports 1 (set)
+    for byte in b"\x1b[?2026$p" {
+        parser.advance(&mut grid, *byte);
+    }
+    assert_eq!(
+        grid.pending_messages_to_pty(),
+        vec![b"\x1b[?2026;1$y".to_vec()]
+    );
+
+    // Simulate TerminalPane::render having run mid-frame: unlock must still
+    // ensure should_render is true so the completed frame is emitted.
+    grid.should_render = false;
+    for byte in b"\x1b[?2026l" {
+        parser.advance(&mut grid, *byte);
+    }
+    assert!(!grid.is_mid_frame());
+    assert!(grid.should_render);
+    let rendered = grid.render(0, 0, &style).unwrap();
+    assert!(rendered.is_some());
+}
+
+#[test]
+fn alternate_screen_modes_47_1047_1049_and_1048_preserve_primary_screen() {
+    for mode in [47u16, 1047, 1049] {
+        let mut grid = create_grid_with_size_and_raw(5, 10, b"PRIMARY1\r\nPRIMARY2  ");
+        let enter = format!("\x1b[?{mode}h");
+        let exit = format!("\x1b[?{mode}l");
+
+        // Entering twice must not clobber the saved primary screen.
+        feed_bytes(&mut grid, enter.as_bytes());
+        feed_bytes(&mut grid, b"ALT_FIRST");
+        feed_bytes(&mut grid, enter.as_bytes());
+        feed_bytes(&mut grid, b"ALT_SECOND");
+
+        grid.should_render = false;
+        feed_bytes(&mut grid, exit.as_bytes());
+        assert!(grid.should_render);
+        assert_eq!(grid.dump_screen(false), "PRIMARY1\nPRIMARY2");
+
+        // Extra exit when already on primary screen must be a no-op.
+        grid.should_render = false;
+        feed_bytes(&mut grid, exit.as_bytes());
+        assert!(!grid.should_render);
+        assert_eq!(grid.dump_screen(false), "PRIMARY1\nPRIMARY2");
+    }
+
+    let grid = create_grid_with_size_and_raw(5, 10, b"\x1b[2;4H\x1b[?1048h\x1b[5;8H\x1b[?1048lZ");
+    assert_eq!(
+        grid.viewport[1].columns.get(3).map(|c| c.character),
+        Some('Z')
+    );
+}
+
+#[test]
+fn repeated_alternate_screen_entry_47_and_1047_preserves_active_content_and_cursor() {
+    for mode in [47u16, 1047] {
+        let mut grid = create_grid_with_size_and_raw(5, 16, b"PRIMARY");
+        let enter = format!("\x1b[?{mode}h");
+        let exit = format!("\x1b[?{mode}l");
+        feed_bytes(&mut grid, enter.as_bytes());
+        feed_bytes(&mut grid, b"\x1b[HALT_KEEP\r\nSECOND");
+        let alternate_content = grid.dump_screen(false);
+        let alternate_cursor = (grid.cursor.x, grid.cursor.y);
+        grid.should_render = false;
+        grid.clear_viewport_before_rendering = false;
+
+        feed_bytes(&mut grid, enter.as_bytes());
+
+        assert_eq!(grid.dump_screen(false), alternate_content, "mode {mode}");
+        assert_eq!(
+            (grid.cursor.x, grid.cursor.y),
+            alternate_cursor,
+            "mode {mode}"
+        );
+        assert!(!grid.should_render, "mode {mode} must not request a redraw");
+        assert!(
+            !grid.clear_viewport_before_rendering,
+            "mode {mode} must not request an alternate-screen clear"
+        );
+
+        // A repeated alternate mode must not skip the remaining CSI parameters.
+        feed_bytes(&mut grid, b"\x1b[?25l");
+        feed_bytes(&mut grid, format!("\x1b[?{mode};25h").as_bytes());
+        assert!(!grid.cursor_is_hidden);
+        assert_eq!(grid.dump_screen(false), alternate_content);
+        feed_bytes(&mut grid, exit.as_bytes());
+        assert_eq!(grid.dump_screen(false), "PRIMARY");
+    }
+}
+
+#[test]
+fn repeated_alternate_screen_entry_1049_clears_active_screen_and_restores_primary() {
+    let mut grid = create_grid_with_size_and_raw(5, 16, b"PRIMARY");
+    let primary_cursor = (grid.cursor.x, grid.cursor.y);
+    feed_bytes(&mut grid, b"\x1b[?1049h\x1b[3;5HOLD_ALT");
+    assert!(grid.dump_screen(false).contains("OLD_ALT"));
+
+    feed_bytes(&mut grid, b"\x1b[?1049h");
+
+    assert_eq!(grid.dump_screen(false), "");
+    assert_eq!((grid.cursor.x, grid.cursor.y), (0, 0));
+    feed_bytes(&mut grid, b"NEW_ALT\x1b[?1049l");
+    assert_eq!(grid.dump_screen(false), "PRIMARY");
+    assert_eq!((grid.cursor.x, grid.cursor.y), primary_cursor);
+}

@@ -1125,6 +1125,11 @@ impl TiledPanes {
     pub fn has_panes(&self) -> bool {
         !self.panes.is_empty()
     }
+    pub fn any_visible_pane_is_mid_frame(&self) -> bool {
+        self.panes
+            .iter()
+            .any(|(pane_id, pane)| !self.panes_to_hide.contains(pane_id) && pane.is_mid_frame())
+    }
     pub fn render(
         &mut self,
         output: &mut Output,
@@ -1170,11 +1175,13 @@ impl TiledPanes {
         for (kind, pane) in self.panes.iter_mut() {
             match kind {
                 PaneId::Terminal(_) => {
-                    output.add_pane_contents(
-                        &connected_clients,
-                        pane.pid(),
-                        pane.pane_contents(None, false, None),
-                    );
+                    if output.collect_pane_contents {
+                        output.add_pane_contents(
+                            &connected_clients,
+                            pane.pid(),
+                            pane.pane_contents(None, false, None),
+                        );
+                    }
                     if output.collect_ansi_pane_contents {
                         output.add_pane_contents_with_ansi(
                             &connected_clients,
@@ -1185,11 +1192,13 @@ impl TiledPanes {
                 },
                 PaneId::Plugin(_) => {
                     for client_id in &connected_clients {
-                        output.add_pane_contents(
-                            &[*client_id],
-                            pane.pid(),
-                            pane.pane_contents(Some(*client_id), false, None),
-                        );
+                        if output.collect_pane_contents {
+                            output.add_pane_contents(
+                                &[*client_id],
+                                pane.pid(),
+                                pane.pane_contents(Some(*client_id), false, None),
+                            );
+                        }
                         if output.collect_ansi_pane_contents {
                             output.add_pane_contents_with_ansi(
                                 &[*client_id],

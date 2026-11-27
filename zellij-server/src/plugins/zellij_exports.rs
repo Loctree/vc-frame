@@ -853,7 +853,9 @@ fn unsubscribe(env: &PluginEnv, event_list: HashSet<EventType>) -> Result<()> {
         .lock()
         .to_anyhow()?
         .retain(|k| !event_list.contains(k));
-    if event_list.contains(&EventType::PaneRenderReportWithAnsi) {
+    if event_list.contains(&EventType::PaneRenderReport)
+        || event_list.contains(&EventType::PaneRenderReportWithAnsi)
+    {
         let _ = env
             .senders
             .send_to_plugin(PluginInstruction::PluginSubscribedToEvents(
