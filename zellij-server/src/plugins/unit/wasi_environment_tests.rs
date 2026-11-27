@@ -403,8 +403,16 @@ fn real_strider_first_load_uses_authorized_artifact_fallback() {
                         .unwrap();
                     let output: Vec<_> =
                         store.data().stdout_pipe.lock().unwrap().drain(..).collect();
+                    // Strider shows paths in the host's notation, detected from
+                    // plugin_cwd (this harness's temp dir), so a Windows host
+                    // renders the same location with backslashes.
+                    let shown = if cfg!(windows) {
+                        expected.replace('/', "\\")
+                    } else {
+                        expected.to_owned()
+                    };
                     // ztext serializes displayed text as comma-separated UTF-8 bytes.
-                    let displayed = expected
+                    let displayed = shown
                         .bytes()
                         .map(|byte| byte.to_string())
                         .collect::<Vec<_>>()
