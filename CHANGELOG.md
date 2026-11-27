@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - Serve every CLI subscriber from the plain pane map, and collect it only when a subscriber exists.
 - Project open no longer doubles its "Project could not be opened: " prefix.
 - The release workflow falls back to the Loctree organisation's signing secrets.
+- Pin the release trust root: `tools/install.sh` now names the Loctree Release key (`8868139E8A9A2291D067135FB979B60C7079E4D4`, release@loct.io), the key the Loctree organisation signs aicx with. The release workflow refused to run with the empty pin ("must pin DEFAULT_GPG_FINGERPRINT before release"), and the installer verifies the signed manifest against it.
 - main carries the 4.6.0 release line again: v4.6.0 was tagged from `release/v4.6.0`, which had not returned to `main`. The installer default now matches the release (it still said 4.5.1).
 
 ## [4.6.0] - 2026-11-20
