@@ -40,10 +40,7 @@ pub fn default_config_dirs() -> Vec<Option<PathBuf>> {
     default_config_dirs_from(home_config_dir(), Some(xdg_config_dir()))
 }
 
-fn default_config_dirs_from(
-    home: Option<PathBuf>,
-    xdg: Option<PathBuf>,
-) -> Vec<Option<PathBuf>> {
+fn default_config_dirs_from(home: Option<PathBuf>, xdg: Option<PathBuf>) -> Vec<Option<PathBuf>> {
     let vibecrafted = home.as_deref().and_then(vibecrafted_config_dir_from_home);
     let frontier = home.as_deref().and_then(frontier_config_dir_from_home);
     vec![
@@ -57,8 +54,7 @@ fn default_config_dirs_from(
 
 fn vibecrafted_config_dir_from_home(home: &Path) -> Option<PathBuf> {
     // home_config_dir returns ~/.config/vc-frame — climb to ~/.config
-    home.parent()
-        .map(|cfg| cfg.join("vibecrafted/vc-frame"))
+    home.parent().map(|cfg| cfg.join("vibecrafted/vc-frame"))
 }
 
 fn frontier_config_dir_from_home(home: &Path) -> Option<PathBuf> {
@@ -70,16 +66,14 @@ fn frontier_config_dir_from_home(home: &Path) -> Option<PathBuf> {
 /// Installed Vibecrafted Frame config directory: `~/.config/vibecrafted/vc-frame`.
 /// Used when vc-frame is launched directly without wrapper env overrides.
 pub fn vibecrafted_config_dir() -> Option<PathBuf> {
-    platform::home_config_dir()
-        .map(|home| vibecrafted_config_dir_from_home(&home).unwrap_or(home))
+    platform::home_config_dir().map(|home| vibecrafted_config_dir_from_home(&home).unwrap_or(home))
 }
 
 /// Operator frontier install: `~/.config/vetcoders/frontier/vc-frame`.
 /// Present on machines launched through vibecrafted; must beat an empty
 /// legacy home dir so configless GUI sessions land on real chrome.
 pub fn frontier_config_dir() -> Option<PathBuf> {
-    platform::home_config_dir()
-        .map(|home| frontier_config_dir_from_home(&home).unwrap_or(home))
+    platform::home_config_dir().map(|home| frontier_config_dir_from_home(&home).unwrap_or(home))
 }
 
 /// Looks for an existing dir, uses that, else returns a

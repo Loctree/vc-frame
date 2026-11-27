@@ -189,7 +189,9 @@ fn validate_runtime_engine(
         ensure_physical_path(frame_entry, "selected Frame runtime")?;
         ensure_physical_path(&installed_engine, "selected Frame runtime")?;
         if installed_engine.canonicalize().ok().as_deref() != Some(executable) {
-            return Err("this Frame engine does not belong to the selected Runtime Pack".to_owned());
+            return Err(
+                "this Frame engine does not belong to the selected Runtime Pack".to_owned(),
+            );
         }
         return Ok(());
     }
@@ -555,11 +557,19 @@ mod tests {
         std::fs::set_permissions(&python, std::fs::Permissions::from_mode(0o755)).unwrap();
 
         let resolver = root.join("vibecrafted-core/vibecrafted_core/external_products.py");
-        std::fs::write(&resolver, format!("#!/bin/sh\nprintf '%s\\n' '{}'\n", current.display())).unwrap();
+        std::fs::write(
+            &resolver,
+            format!("#!/bin/sh\nprintf '%s\\n' '{}'\n", current.display()),
+        )
+        .unwrap();
         validate_runtime_engine(&root, &python, &entry, &current).unwrap();
 
         // Resolver points to another binary -> rejected.
-        std::fs::write(&resolver, format!("#!/bin/sh\nprintf '%s\\n' '{}'\n", unrelated.display())).unwrap();
+        std::fs::write(
+            &resolver,
+            format!("#!/bin/sh\nprintf '%s\\n' '{}'\n", unrelated.display()),
+        )
+        .unwrap();
         assert!(validate_runtime_engine(&root, &python, &entry, &current).is_err());
 
         // Resolver exits 69 (unavailable/mismatch) -> rejected.
@@ -567,7 +577,11 @@ mod tests {
         assert!(validate_runtime_engine(&root, &python, &entry, &current).is_err());
 
         // Symlinked entry or resolver -> rejected even if resolver returns current.
-        std::fs::write(&resolver, format!("#!/bin/sh\nprintf '%s\\n' '{}'\n", current.display())).unwrap();
+        std::fs::write(
+            &resolver,
+            format!("#!/bin/sh\nprintf '%s\\n' '{}'\n", current.display()),
+        )
+        .unwrap();
         let real_entry = root.join("bin/vc-frame-real");
         std::fs::rename(&entry, &real_entry).unwrap();
         std::os::unix::fs::symlink(&real_entry, &entry).unwrap();
