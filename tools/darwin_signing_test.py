@@ -20,6 +20,15 @@ SECRET_NAMES = (
     'VC_NOTARY_API_KEY_B64', 'VC_NOTARY_API_KEY_ID', 'VC_NOTARY_API_ISSUER',
     'VC_NOTARY_APPLE_ID', 'VC_NOTARY_PASSWORD', 'VC_NOTARY_TEAM_ID',
 )
+# Loctree organisation secrets read first; each VC_* name stays the fallback.
+LOCTREE_ORG_SECRETS = {
+    'VC_CERT_P12_B64': 'LOCTREE_MACOS_CERT_P12_BASE64',
+    'VC_CERT_PASSWORD': 'LOCTREE_MACOS_CERT_PASSWORD',
+    'VC_SIGNING_IDENTITY': 'LOCTREE_MACOS_SIGNING_IDENTITY',
+    'VC_NOTARY_APPLE_ID': 'LOCTREE_NOTARY_APPLE_ID',
+    'VC_NOTARY_PASSWORD': 'LOCTREE_NOTARY_PASSWORD',
+    'VC_NOTARY_TEAM_ID': 'LOCTREE_NOTARY_TEAM_ID',
+}
 MOCK = r'''
 import json, os, pathlib, sys
 name = pathlib.Path(sys.argv[0]).name
@@ -156,7 +165,9 @@ class DarwinSigningTests(unittest.TestCase):
             self.assertIn('x86_64-apple-darwin', job)
             self.assertIn('aarch64-apple-darwin', job)
             for secret in SECRET_NAMES:
-                self.assertIn('${{ secrets.' + secret + ' }}', job)
+                org = LOCTREE_ORG_SECRETS.get(secret)
+                read = f'secrets.{org} || secrets.{secret}' if org else f'secrets.{secret}'
+                self.assertIn('${{ ' + read + ' }}', job)
 
     def test_local_package_hashes_the_signed_bytes_in_external_target(self) -> None:
         repo = self.root / 'package-fixture'

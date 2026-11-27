@@ -80,7 +80,11 @@ The same secret names as the sibling macOS release workflow are used:
   `VC_NOTARY_TEAM_ID`.
 
 Store these in the protected `release` environment, alongside the GPG secrets
-below. `GITHUB_TOKEN` remains GitHub-provided. `VC_SIGNING_KEY` from the sibling
+below. The workflow reads the Loctree organisation's shared signing secrets
+first (`LOCTREE_MACOS_CERT_P12_BASE64`, `LOCTREE_MACOS_CERT_PASSWORD`,
+`LOCTREE_MACOS_SIGNING_IDENTITY`, `LOCTREE_NOTARY_*`, `LOCTREE_GPG_*`) and
+falls back to the names above. An organisation secret reaches only the
+repositories it is shared with, so vc-frame must be one of them. `GITHUB_TOKEN` remains GitHub-provided. `VC_SIGNING_KEY` from the sibling
 bundle workflow is not used here: vc-frame's archive trust root remains GPG.
 A missing/invalid Developer ID identity fails CI; CI never substitutes ad-hoc
 signing. Neither candidate nor tag builds can skip notarization.
