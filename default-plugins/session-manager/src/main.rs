@@ -1604,6 +1604,21 @@ fn open_project_plan(
     )
 }
 
+/// The rail's hover. Off the current-session block the hovered row takes the
+/// block tint, as it always has. On the block the tint is already there, so a
+/// tint alone would make the cursor vanish exactly where the user works: the
+/// hovered row lights its whole line in the accent instead, dim chrome
+/// included, which no resting row ever does.
+fn rail_hover_text(fitted: &str, styled: Text, on_block_tint: bool) -> Text {
+    if on_block_tint {
+        Text::new(fitted)
+            .selected()
+            .color_range(1, 0..fitted.chars().count())
+    } else {
+        styled.selected()
+    }
+}
+
 /// Resolve hover highlight for a plugin-relative mouse line.
 /// Missing map key / negative line → clear (no sticky highlight on chrome gaps).
 fn rail_hover_target(line: isize, click_map: &BTreeMap<usize, RailClickTarget>) -> Option<usize> {
@@ -2748,6 +2763,8 @@ impl State {
             };
             let fitted_chars = fitted.chars().count();
             let mut text = Text::new(fitted.clone());
+            // Rows already on the block tint need a hover of their own.
+            let mut on_block_tint = false;
             match rail_row.kind {
                 SessionRailRowKind::HostTitle => {
                     if mode != RailWidthMode::Dense {
@@ -2758,6 +2775,7 @@ impl State {
                 SessionRailRowKind::Host(host_row) => {
                     if self.selected_host_row == Some(host_row) {
                         text = text.selected();
+                        on_block_tint = true;
                     }
                 },
                 SessionRailRowKind::Separator => {
@@ -2796,6 +2814,7 @@ impl State {
                     // highlight bed — this header row opens it.
                     if is_current || selected_index == Some(session_index) {
                         text = text.selected();
+                        on_block_tint = true;
                     }
                 },
                 SessionRailRowKind::LiveProcess { session_index, .. } => {
@@ -2831,6 +2850,7 @@ impl State {
                     // so the whole "you are here" region reads as one shape.
                     if in_current_session {
                         text = text.selected();
+                        on_block_tint = true;
                     }
                 },
                 SessionRailRowKind::OpenProject => {
@@ -2841,7 +2861,7 @@ impl State {
             }
             // OS hover: same highlight language for sessions, live tabs, drawers.
             if self.rail_hover_row == Some(row) {
-                text = text.selected();
+                text = rail_hover_text(&fitted, text, on_block_tint);
             }
             // Every data row is clickable; header (row 0) never enters the map.
             let target = rail_row_click_target(&rail_row.kind);
@@ -7471,6 +7491,32 @@ mod rail_tests {
         assert_eq!(rail_hover_target(-1, &click_map), None);
     }
 
+    #[test]
+    fn rail_hover_stays_visible_on_the_current_session_block() {
+        let fitted = "   ○ codex · Read private";
+        let width = fitted.chars().count();
+        let resting_on_block = Text::new(fitted).color_range(2, 3..4).selected();
+
+        // On the block the tint is already there: the hovered row must not
+        // look like its resting self, and it lights the whole line.
+        let hovered = rail_hover_text(fitted, resting_on_block.clone(), true);
+        assert_ne!(format!("{hovered:?}"), format!("{resting_on_block:?}"));
+        assert_eq!(
+            format!("{hovered:?}"),
+            format!(
+                "{:?}",
+                Text::new(fitted).selected().color_range(1, 0..width)
+            )
+        );
+
+        // Off the block the hover keeps its tint and the row's own styling.
+        let resting_off_block = Text::new(fitted).color_range(2, 3..4);
+        let hovered = rail_hover_text(fitted, resting_off_block.clone(), false);
+        assert_eq!(
+            format!("{hovered:?}"),
+            format!("{:?}", resting_off_block.selected())
+        );
+    }
     #[test]
     fn char_offset_of_speaks_chars_not_bytes() {
         // "   ◉ tab · cmd" — the dot separator sits after multi-byte `◉`.
